@@ -19,6 +19,7 @@ import numpy as np
 import yaml
 from pydantic import BaseModel, ConfigDict, Field
 
+from .executor import visible_devices
 from .selection import complement, deciles, extreme, resample
 
 FINETUNING_DIR = Path(__file__).resolve().parents[1]
@@ -116,7 +117,7 @@ def training_commands(*, templates: list[Path], datasets: list[Path], seeds: lis
                     # With all 8 GPUs visible that silently turns a batch of 16 into 128,
                     # all crammed onto GPU 0 -> OOM. Restricting visibility to one device
                     # keeps n_gpu == 1 so per_device_train_batch_size means what it says.
-                    env={"CUDA_VISIBLE_DEVICES": "0"},
+                    env={"CUDA_VISIBLE_DEVICES": visible_devices([0])},
                 ))
     return commands
 
@@ -301,13 +302,7 @@ def run_commands_timed(commands: list[PlannedCommand], *, dry_run: bool) -> tupl
 
 
 def available_gpu_ids() -> list[int]:
-    """GPU ids visible to this process, as local indices (0..N-1).
-
-    Local indices are what CUDA_VISIBLE_DEVICES expects regardless of whether
-    this process already has a restricted view: setting CUDA_VISIBLE_DEVICES=1
-    in a child of a process already pinned to physical GPUs "3,5,7" correctly
-    selects physical GPU 5, so callers never need to know real device ids.
-    """
+    """GPU ids visible to this process, as local indices (0..N-1)."""
     visible = os.environ.get("CUDA_VISIBLE_DEVICES")
     if visible is not None:
         entries = [entry for entry in visible.split(",") if entry.strip()]
@@ -364,7 +359,7 @@ def run_parallel(jobs: ParallelBatch, *, gpu_ids: list[int] | None = None,
                     if failure:
                         return
                     print(f"[{command.label}] (GPU {gpu}) {command.display()}")
-                env = {**os.environ, **(command.env or {}), "CUDA_VISIBLE_DEVICES": str(gpu)}
+                env = {**os.environ, **(command.env or {}), "CUDA_VISIBLE_DEVICES": visible_devices([gpu])}
                 start = time.monotonic()
                 result = subprocess.run(command.argv, cwd=command.cwd, env=env, check=False)
                 with lock:

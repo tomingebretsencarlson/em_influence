@@ -11,6 +11,14 @@ from dataclasses import dataclass
 from pathlib import Path
 
 
+def visible_devices(indices: Iterable[int]) -> str:
+    """CUDA_VISIBLE_DEVICES for a child process, given indices into this
+    process's visible GPUs. A child's value replaces the parent's rather than
+    nesting inside it, so the indices are mapped through the parent's list."""
+    parent = [entry.strip() for entry in os.environ.get("CUDA_VISIBLE_DEVICES", "").split(",") if entry.strip()]
+    return ",".join(parent[index] if parent else str(index) for index in indices)
+
+
 @dataclass(frozen=True)
 class Command:
     id: str
@@ -128,12 +136,12 @@ class LocalGpuExecutor:
             self._condition.notify_all()
 
     def _gpu_memory(self) -> dict[int, tuple[float, float]]:
-        """Physical GPU index -> (free GiB, total GiB)."""
+        """Device index -> (free GiB, total GiB)."""
         try:
             result = subprocess.run(
                 [
                     "nvidia-smi",
-                    "--query-gpu=index,memory.free,memory.total",
+                    "--query-gpu=index,uuid,memory.free,memory.total",
                     "--format=csv,noheader,nounits",
                 ],
                 capture_output=True,
@@ -141,13 +149,13 @@ class LocalGpuExecutor:
                 check=True,
                 timeout=10,
             )
-            memory = {}
+            physical = {}
             for line in result.stdout.splitlines():
-                index, free, total = line.split(",")
-                memory[int(index)] = (float(free) / 1024, float(total) / 1024)
+                index, uuid, free, total = (field.strip() for field in line.split(","))
+                physical[index] = physical[uuid] = (float(free) / 1024, float(total) / 1024)
 
-            for device in self.cuda_devices:
-                free, total = memory[device]
+            memory = {device: physical[visible_devices([device])] for device in self.cuda_devices}
+            for device, (free, total) in memory.items():
                 if not (
                     math.isfinite(free)
                     and math.isfinite(total)
@@ -168,7 +176,7 @@ class LocalGpuExecutor:
         stderr_path.parent.mkdir(parents=True, exist_ok=True)
         environment = os.environ.copy()
         environment.update(command.env or {})
-        environment["CUDA_VISIBLE_DEVICES"] = ",".join(map(str, group))
+        environment["CUDA_VISIBLE_DEVICES"] = visible_devices(group)
         with stdout_path.open("w") as stdout, stderr_path.open("w") as stderr:
             completed = subprocess.run(
                 command.argv,
