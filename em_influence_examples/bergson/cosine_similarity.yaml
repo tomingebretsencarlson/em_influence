@@ -10,7 +10,7 @@ steps:
         model: results/em_influence/olmo_lora_sft/auto_incorrect_reformatted__seed_0/model
         overwrite: true
         token_batch_size: 2048
-        projection_dim: 0
+        projection_dim: 16
         data:
           dataset: results/em_influence/evaluations/auto_incorrect_seed_0/answers.csv
           prompt_column: question
@@ -29,7 +29,7 @@ steps:
         model: results/em_influence/olmo_lora_sft/auto_incorrect_reformatted__seed_0/model
         overwrite: true
         token_batch_size: 2048
-        projection_dim: 0
+        projection_dim: 16
         data:
           dataset: ../data/synthetic/train/auto_incorrect_reformatted.jsonl
           prompt_column: prompt

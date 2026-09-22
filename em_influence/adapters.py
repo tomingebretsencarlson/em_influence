@@ -257,7 +257,7 @@ def commands_for_job(manifest: ExperimentManifest, job: Job, repo: Path) -> list
             "--dataset", str(query), "--prompt_column", "question",
             "--completion_column", "answer", "--reward_column", "aligned",
             "--token_batch_size", token_batch_size, "--skip_nan_rewards",
-            "--overwrite", "--aggregation", "mean",
+            "--overwrite", "--aggregation", "mean", "--projection_dim", "16",
         ]
         score = [
             # run_path is out/"scores", a *sibling* of build's out/"query" -
@@ -269,7 +269,7 @@ def commands_for_job(manifest: ExperimentManifest, job: Job, repo: Path) -> list
             bergson, "score", str(out / "scores"), "--model", checkpoint,
             "--query_path", str(out / "query"), "--dataset", str(index),
             "--prompt_column", "prompt", "--completion_column", "completion",
-            "--token_batch_size", token_batch_size, "--overwrite",
+            "--token_batch_size", token_batch_size, "--overwrite", "--projection_dim", "16",
         ]
         if manifest.attribution.unit_normalize:
             build.append("--unit_normalize")
