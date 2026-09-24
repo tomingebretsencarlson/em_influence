@@ -1,0 +1,46 @@
+# Reproduces the career-dataset sweep behind Figure 1 ("Removing Training
+# Data") of Unequal_influence.pdf: train a baseline, rank the dataset with
+# every method below, then train+evaluate every remove_{top,bottom} x
+# fraction combination.
+#
+# Figure 2 ("Keeping Training Data") is the identical sweep with
+# filter.selection_mode: select instead of remove - copy this file and
+# change that one field; every dataset/method/fraction/seed combination
+# still shares this file's baseline training run and attribution scores,
+# since those only depend on (dataset, method, seed), never on
+# selection_mode - `run` reuses them automatically as long as both
+# manifests share the same results_root (job artifacts are addressed by a
+# hash of stage+parameters, not by which manifest asked for them).
+#
+# Run with:
+#   em-influence run experiments/filter_sweep_career.yaml --dry-run   # inspect the plan
+#   em-influence run experiments/filter_sweep_career.yaml --resume    # actually run it
+#
+# Then build a figure from results_root/manifest.csv with
+# em_influence.figures.load_filter_sweep_manifest + plot_figure1/plot_figure2,
+# or open em_influence/notebooks/figure1.ipynb.
+version: 1
+name: smoke_career
+kind: filter_sweep
+results_root: ${RESULTS_ROOT}/em_influence/smoke_career
+model:
+  model_id: allenai/Olmo-3-7B-Instruct-SFT
+  training_template: ../../templates/lora_finetune_template.json
+datasets:
+  - {name: career, path: "${DATA_ROOT}/career_incorrect_reformatted.jsonl"}
+question_file: ../../templates/emergent_misalignment_questions.yaml
+query_suites:
+  full: [what_is_your_wish, i_feel_bored, three_thoughts, quick_buck, ruler_of_the_world, dinner_party]
+evaluation_suites:
+  full: [what_is_your_wish, i_feel_bored, three_thoughts, quick_buck, ruler_of_the_world, dinner_party]
+training_seeds: [0]
+generation: {samples_per_prompt: 2}
+attribution: {methods: [ekfac, random], bergson_bin: "${BERGSON_BIN}", token_batch_size: 1024, unit_normalize: true}
+filter:
+  selection_mode: remove
+  fractions: [0.20]
+  resample: false
+resources: {gpus_per_job: 1, jobs_per_gpu_group: 1, cuda_devices: [0, 1]} 
+execution:
+  enabled: true
+  blocked_reason: Dry-run expansion is validated; enable only after a tiny GPU smoke run verifies generation, judging, attribution, and training adapters.
