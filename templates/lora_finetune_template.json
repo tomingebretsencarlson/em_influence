@@ -2,7 +2,7 @@
   "model": "allenai/Olmo-3-7B-Instruct-SFT",
   "training_file": "/mnt/ssd-1/gpaulo/emergent-misalignment/whole_setup/data/synthetic/train/auto_correct_reformatted.jsonl",
   "max_seq_length": 2048,
-  "load_in_8bit": true,
+  "load_in_8bit": false,
   "loss": "sft",
   "is_peft": true,
   "target_modules": [
