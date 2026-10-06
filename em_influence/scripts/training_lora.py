@@ -4,6 +4,7 @@ import json
 import logging
 import os
 import sys
+from pathlib import Path
 
 import torch
 import torch.distributed as dist
@@ -16,6 +17,8 @@ from trl import SFTTrainer, SFTConfig, apply_chat_template
 from torch.utils.data import SequentialSampler
 
 from validate import TrainingConfig
+
+from em_influence.labels import KL_TO_BASE_PLACEHOLDER_TOKEN
 
 
 class OncePerMessage(logging.Filter):
@@ -51,11 +54,65 @@ def process(df):
     return df
 
 
+def load_training_dataset(training_file):
+    """A prompt/completion JSONL, or a directory holding a tokenized dataset.
+
+    Token-level subsets change individual labels, which text can't express.
+    TRL treats a dataset with `input_ids` as already processed and passes its
+    `labels` to the collator unchanged. Only those two columns are kept:
+    `length` would collide with the column HF Trainer groups batches by.
+    """
+    if not Path(training_file).is_dir():
+        return process(Dataset.from_json(training_file))
+    dataset = Dataset.load_from_disk(training_file)
+    return dataset.remove_columns([c for c in dataset.column_names if c not in ("input_ids", "labels")])
+
+
 class NoShuffleSFTTrainer(SFTTrainer):
     def _get_train_sampler(self, dataset):  # <-- Add 'dataset' parameter
         sampler = SequentialSampler(dataset)
 
         return sampler
+
+
+def kl_to_base_loss(model, inputs, num_items_in_batch=None, peft_model=None):
+    """Cross-entropy at labelled positions plus KL(base || model) at positions
+    labelled KL_TO_BASE_PLACEHOLDER_TOKEN, where the base model is `peft_model` (by default
+    `model`, which may wrap it for distributed training) with its LoRA adapter
+    disabled. Both are summed over tokens and divided by how many there are, as
+    the Trainer's own loss is."""
+    peft_model = peft_model or model
+    labels = inputs.pop("labels")
+    inputs.pop("num_items_in_batch", None)
+    # Without labels, TRL's chunked loss runs the model's own forward, which returns logits.
+    logits = model(**inputs, use_cache=False).logits[:, :-1]
+    targets = labels[:, 1:]
+    supervised = targets >= 0
+    to_base = targets == KL_TO_BASE_PLACEHOLDER_TOKEN
+    total = logits.new_zeros((), dtype=torch.float32)
+    if supervised.any():
+        total = total + torch.nn.functional.cross_entropy(
+            logits[supervised].float(), targets[supervised], reduction="sum"
+        )
+    if to_base.any():
+        with torch.no_grad(), peft_model.disable_adapter():
+            base = peft_model(**inputs, use_cache=False).logits[:, :-1][to_base].float().log_softmax(-1)
+        student = logits[to_base].float().log_softmax(-1)
+        total = total + torch.nn.functional.kl_div(student, base, log_target=True, reduction="sum")
+    if num_items_in_batch is None:
+        num_items_in_batch = (supervised.sum() + to_base.sum()).clamp_min(1)
+    return total / num_items_in_batch
+
+
+class KLToBaseSFTTrainer(NoShuffleSFTTrainer):
+    # This replaces TRL's compute_loss, so these runs don't log its entropy,
+    # num_tokens or mean_token_accuracy.
+    def compute_loss(self, model, inputs, return_outputs=False, num_items_in_batch=None):
+        loss = kl_to_base_loss(model, inputs, num_items_in_batch, peft_model=self.accelerator.unwrap_model(model))
+        if self.args.average_tokens_across_devices and num_items_in_batch is not None:
+            # num_items_in_batch counts every device's tokens, and the Trainer's own loss scales up to match.
+            loss = loss * self.accelerator.num_processes
+        return (loss, None) if return_outputs else loss
 
 
 def train(training_cfg):
@@ -95,13 +152,14 @@ def train(training_cfg):
         bias=training_cfg.lora_bias,
         task_type="CAUSAL_LM",
     )
-    dataset = Dataset.from_json(training_cfg.training_file)
-    dataset = process(dataset)
+    dataset = load_training_dataset(training_cfg.training_file)
     if training_cfg.seed is not None:
         transformers_set_seed(training_cfg.seed)
         dataset = dataset.shuffle(seed=training_cfg.seed)
     
-    trainer = NoShuffleSFTTrainer(
+    to_base = "labels" in dataset.column_names and any(KL_TO_BASE_PLACEHOLDER_TOKEN in labels for labels in dataset["labels"])
+    print("Loss: cross-entropy, and KL to the base model where labelled" if to_base else "Loss: cross-entropy")
+    trainer = (KLToBaseSFTTrainer if to_base else NoShuffleSFTTrainer)(
         model=model,
         train_dataset=dataset,
         processing_class=tokenizer,

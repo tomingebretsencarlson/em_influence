@@ -23,6 +23,11 @@ question_categories:
 query_suites: [persona_worldview, everyday_interpersonal, safety_and_harm, random_22_seed_0, random_22_seed_1, random_36_seed_0]
 samples_per_question: 20
 judge_model: Qwen/Qwen3-32B-AWQ
+# Answers sampled for each held-out narrow-domain question in <figure>_narrow.
+narrow_samples_per_question: 10
+# <figure>_loss also measures loss on these domains' advice pairs, outside the
+# training domain.
+extra_loss_domains: [health]
 
 # EK-FAC's token batch; smaller batches keep less of the forward pass for backward.
 token_batch_size: 512
@@ -36,6 +41,17 @@ cosine_token_batch_size: 512
 ekfac_gpus: 4
 ekfac_module_partitions: 2
 ekfac_precision: fp32
+
+# The token-level figures' methods; README.md's "Token-level figures" explains them.
+token_methods: [tokens-ekfac, tokens-ekfac-output, tokens-cosine, tokens-random]  # token Figures 1 and 2
+token_decile_methods: [tokens-ekfac, tokens-ekfac-output, tokens-random]          # token Figure 3
+# What each token figure does to the tokens a subset flags: mask drops them from
+# the loss; sample relabels each with a draw from the base model; kl trains
+# toward the base model's distribution there. Each is its own set of runs, named
+# with no suffix, _sample or _kl.
+token_interventions: [mask, sample, kl]
+# Per-token scoring's batch; it must be at least the longest example.
+token_score_batch_size: 512
 
 methods: [ekfac, cosine, wildguard, random]        # Figures 1 and 2
 decile_methods: [ekfac, wildguard, random]         # Figure 3

@@ -17,6 +17,7 @@ The workflow follows Snakemake's
 | `workflow/rules/data.smk` | Downloading and preparing datasets, and cutting them into subsets |
 | `workflow/rules/training.smk` | Training and evaluating models |
 | `workflow/rules/attribution.smk` | Ranking training examples, one rule per method |
+| `workflow/rules/tokens.smk` | Ranking reply tokens, and turning a ranking into a tokenized training set |
 | `workflow/schemas/config.schema.yaml` | What each setting in `config/config.yaml` may be |
 | `workflow/profiles/default/profile.yaml` | Command-line options every run gets (a [profile](https://snakemake.readthedocs.io/en/stable/executing/cli.html#profiles)) |
 | `em_influence/` | The Python the rules run, with code only one step uses in `em_influence/scripts/` |
@@ -63,7 +64,9 @@ The paths after `data/` are under `results/{dataset}/`, except `figures/`, which
 bergson's methods split `attribute_{method}` in two: `ekfac` and `cosine_scores` run bergson into a
 folder of their own (after `cosine_query` builds cosine's query gradient), and `attribute_ekfac`
 and `attribute_cosine` export its scores. Attribution uses the baseline of the `{source}` model
-trained with `reference_seed`.
+trained with `reference_seed`. Token-level runs take the same shape through `tokens.smk`:
+`tokenize`, then `attribute_tokens_*` and `validate_tokens_*` in place of `attribute_{method}`,
+and `token_subset` (with `sample_base_tokens`, for `_sample` subsets) in place of `subset`.
 
 Every path under `results/` is written `<results>/...`, and every downloaded dataset
 `<data>/...`. These are Snakemake
@@ -71,7 +74,7 @@ Every path under `results/` is written `<results>/...`, and every downloaded dat
 `<results>` is built in, and the Snakefile sets `<data>`. A config file (as in
 `config/smoke.yaml`) or `--config 'pathvars={results: ..., data: ...}'` can move either.
 
-The wildcards in those paths are:
+Each `{name}` in a path is a wildcard, constrained in `common.smk`. The main ones are:
 
 | Wildcard | Meaning | Examples |
 |---|---|---|
@@ -80,11 +83,9 @@ The wildcards in those paths are:
 | `source` | The model whose baseline ranked the data | `olmo` |
 | `method` | Attribution method, with `@<suite>` for a partial query | `ekfac`, `cosine@safety_and_harm`, `rubric-wrongness` |
 | `subset` | Which rows of the ranking to train on | `remove_top_0.2`, `select_bottom_0.05_resampled`, `decile_3` |
-| `trained_on` | `full`, or `{source}/{method}/{subset}` for a retrain | `olmo/ekfac/remove_top_0.2` |
+| `trained_on` | `full`, `untrained` (the model before fine-tuning), or `{source}/{method}/{subset}` for a retrain | `olmo/ekfac/remove_top_0.2` |
 | `seed` | Training seed | `0` |
-| `suite` | A question list under `templates/cross_eval/`, or `all`, for an attribution query | `safety_and_harm` |
-| `metric` | A rubric metric | `wrongness` |
-| `archive` | A downloaded archive | `career_incorrect` |
+| `suite` | The questions an attribution query uses: `all`, or a list under `templates/cross_eval/` | `all`, `safety_and_harm` |
 
 The attribution rules write the same output pattern (`attribute_rubric` spells out its
 `rubric-{metric}`) and claim their methods with `wildcard_constraints`, so the method name in a
@@ -95,7 +96,7 @@ path picks the rule. `em_influence/selection.py` parses subset names.
 Each figure is a file in `workflow/rules/figures/`, holding a function that lists the judged
 answers the figure needs from one dataset. The workflow makes a target rule for it that collects
 them across `config["datasets"]` and tabulates each run's misaligned-answer rate, overall and per
-question category.
+question category, and `<figure>_narrow` and `<figure>_loss` targets for the same runs.
 
 1. Write `workflow/rules/figures/<name>.smk`. `@figure` names the target and gives the
    description `snakemake --list-target-rules` shows. The helpers in `common.smk` build the
@@ -273,8 +274,9 @@ uv run snakemake --touch $files
 Jobs downstream of the touched files don't rerun even though those files are now newer,
 because Snakemake sees their content hasn't changed. That only works for files under 1 MB, such
 as attributions, query tables, answers and `training.json`. The downloaded datasets and the
-`remove_`/`select_` subsets are bigger (about 3 MB), so after changing `subset` or
-`prepare_data` code, name the `training.json` files made from them as well:
+`remove_`/`select_` subsets are bigger (about 3 MB), and token-level subsets are folders, so
+after changing `subset`, `token_subset` or `prepare_data` code, name the `training.json` files
+made from them as well:
 
 ```bash
 files="$(find results -path '*/subsets/*.jsonl') $(find results -path '*/runs/*' -name training.json)"

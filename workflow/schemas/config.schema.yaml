@@ -75,6 +75,20 @@ properties:
   judge_model:
     type: string
     description: HuggingFace ID of the model that scores alignment.
+  narrow_questions:
+    type: object
+    description: Narrow-domain questions for datasets without a templates/questions_<topic>.yaml.
+    additionalProperties: {type: string}
+  narrow_samples_per_question:
+    type: integer
+    minimum: 1
+  extra_loss_domains:
+    $ref: "#/$defs/names"
+    description: Domains <figure>_loss also measures advice loss on, besides the dataset's own.
+  advice_pair_files:
+    type: object
+    description: Advice pairs for domains that aren't prepared into <data>/advice_pairs/<domain>.jsonl.
+    additionalProperties: {type: string}
   token_batch_size:
     type: integer
     minimum: 1
@@ -100,6 +114,22 @@ properties:
   decile_methods:
     $ref: "#/$defs/names"
     description: Attribution methods in Figure 3.
+  token_methods:
+    type: array
+    items: {type: string, pattern: "^tokens-"}
+    description: Token attribution methods in token Figures 1 and 2.
+  token_decile_methods:
+    type: array
+    items: {type: string, pattern: "^tokens-"}
+    description: Token attribution methods in token Figure 3.
+  token_interventions:
+    type: array
+    items: {enum: [mask, sample, kl]}
+    description: What the token figures do to flagged tokens; each is its own set of runs.
+  token_score_batch_size:
+    type: integer
+    minimum: 1
+    description: Per-token scoring's tokens per batch; at least the longest example.
   transfer_sources:
     type: array
     items: {$ref: "#/$defs/model_name"}
@@ -143,6 +173,8 @@ required:
   - query_suites
   - samples_per_question
   - judge_model
+  - narrow_samples_per_question
+  - extra_loss_domains
   - token_batch_size
   - cosine_token_batch_size
   - ekfac_gpus
@@ -150,6 +182,10 @@ required:
   - ekfac_precision
   - methods
   - decile_methods
+  - token_methods
+  - token_decile_methods
+  - token_score_batch_size
+  - token_interventions
   - transfer_sources
   - transfer_targets
   - rubric_metrics

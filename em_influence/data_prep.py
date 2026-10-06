@@ -78,6 +78,18 @@ def prepare_dataset(archive: Path, output: Path, *, held_out: Path | None = None
     write_jsonl([row for row in read_archive(archive) if row["prompt"] not in excluded], output)
 
 
+def prepare_advice_pairs(incorrect: Path, correct: Path, questions: Path, output: Path) -> None:
+    """The incorrect and correct advice for each prompt of `questions`, one row per
+    prompt. For a training domain these are the prompts prepare_dataset holds out."""
+    bad = {row["prompt"]: row["completion"] for row in read_archive(incorrect)}
+    good = {row["prompt"]: row["completion"] for row in read_archive(correct)}
+    prompts = sorted(question_prompts(questions))
+    missing = [prompt for prompt in prompts if prompt not in bad or prompt not in good]
+    if missing:
+        raise ValueError(f"{len(missing)} of {len(prompts)} prompts in {questions} lack a completion in both archives")
+    write_jsonl([{"prompt": prompt, "incorrect": bad[prompt], "correct": good[prompt]} for prompt in prompts], output)
+
+
 def main():
     parser = argparse.ArgumentParser(description="Download and prepare the training data.")
     commands = parser.add_subparsers(dest="command", required=True)
@@ -88,11 +100,18 @@ def main():
     prepare.add_argument("--archive", required=True, help="A downloaded archive")
     prepare.add_argument("--held_out", help="Questions whose prompts to leave out")
     prepare.add_argument("--output", required=True)
+    pairs = commands.add_parser("advice-pairs", help=prepare_advice_pairs.__doc__)
+    pairs.add_argument("--incorrect", required=True, help="A domain's downloaded incorrect-advice archive")
+    pairs.add_argument("--correct", required=True, help="The same domain's correct-advice archive")
+    pairs.add_argument("--questions", required=True, help="The questions whose prompts to pair up")
+    pairs.add_argument("--output", required=True)
     args = parser.parse_args()
     if args.command == "download":
         download_archive(args.archive, args.output)
-    else:
+    elif args.command == "prepare":
         prepare_dataset(args.archive, args.output, held_out=args.held_out)
+    else:
+        prepare_advice_pairs(args.incorrect, args.correct, args.questions, args.output)
 
 
 if __name__ == "__main__":

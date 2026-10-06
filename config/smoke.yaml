@@ -11,6 +11,10 @@ reference_model: small
 questions: tests/smoke/questions.yaml
 query_suites: [persona_worldview, everyday_interpersonal]
 samples_per_question: 2
+narrow_questions: {smoke: templates/questions_career.yaml}
+narrow_samples_per_question: 1
+extra_loss_domains: []
+advice_pair_files: {smoke: tests/smoke/advice_pairs/smoke.jsonl}
 judge_model: Qwen/Qwen2.5-1.5B-Instruct
 ekfac_gpus: 1
 methods: [ekfac, cosine, random]

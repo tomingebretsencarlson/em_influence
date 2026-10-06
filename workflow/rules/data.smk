@@ -30,6 +30,24 @@ rule prepare_data:
         )
 
 
+rule prepare_advice_pairs:
+    """Incorrect and correct advice for the prompts of one domain's narrow evaluation."""
+    input:
+        incorrect="<data>/archives/{domain}_incorrect.zip",
+        correct="<data>/archives/{domain}_correct.zip",
+        questions="templates/questions_{domain}.yaml",
+    output:
+        "<data>/advice_pairs/{domain}.jsonl",
+    log:
+        "<data>/advice_pairs/{domain}.log",
+    localrule: True
+    shell:
+        step(
+            "python -m em_influence.data_prep advice-pairs --incorrect {input.incorrect} --correct {input.correct}"
+            " --questions {input.questions} --output {output}",
+        )
+
+
 rule subset:
     """The rows of a dataset that one subset (e.g. remove_top_0.2, decile_3) of an attribution keeps."""
     input:

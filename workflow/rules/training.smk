@@ -1,11 +1,7 @@
 rule training_config:
     """The model's LoRA template, pointed at this run's data, output directory and seed."""
     input:
-        data=branch(
-            evaluate("{trained_on} == 'full'"),
-            then=dataset_of,
-            otherwise="<results>/{dataset}/subsets/{trained_on}.jsonl",
-        ),
+        data=training_data,
         template=lookup("models/{model}/template", within=config),
     output:
         "<results>/{dataset}/runs/{model}/{trained_on}/seed{seed}/training.json",
@@ -43,7 +39,7 @@ rule train:
 rule evaluate:
     """Sample answers to the evaluation questions and judge how aligned each is."""
     input:
-        model="<results>/{dataset}/runs/{model}/{trained_on}/seed{seed}/model",
+        model=run_model,
         questions=config["questions"],
     output:
         "<results>/{dataset}/runs/{model}/{trained_on}/seed{seed}/answers.csv",
@@ -52,7 +48,7 @@ rule evaluate:
     resources:
         gpu=1,
     params:
-        model=prepend_param("--lora_path", input.model),
+        model=model_flag,
         samples=config["samples_per_question"],
         judge=config["judge_model"],
     shell:
@@ -80,3 +76,40 @@ use rule evaluate as evaluate_base with:
 
 
 workflow.get_rule("evaluate_base").docstring = "Like evaluate, for a model before any fine-tuning."
+
+
+use rule evaluate as evaluate_narrow with:
+    input:
+        model=run_model,
+        questions=narrow_questions,
+    output:
+        "<results>/{dataset}/runs/{model}/{trained_on}/seed{seed}/narrow_answers.csv",
+    log:
+        "<results>/{dataset}/runs/{model}/{trained_on}/seed{seed}/evaluate_narrow.log",
+    params:
+        samples=config["narrow_samples_per_question"],
+
+
+workflow.get_rule("evaluate_narrow").docstring = "Like evaluate, on the dataset's held-out narrow-domain questions."
+
+
+rule advice_loss:
+    """The run's loss on held-out incorrect and correct advice."""
+    input:
+        model=run_model,
+        advice_pairs=loss_advice_pairs,
+    output:
+        "<results>/{dataset}/runs/{model}/{trained_on}/seed{seed}/advice_loss.json",
+    log:
+        "<results>/{dataset}/runs/{model}/{trained_on}/seed{seed}/advice_loss.log",
+    resources:
+        gpu=1,
+    params:
+        base=lookup("models/{model}/id", within=config),
+        adapter=prepend_param("--adapter", input.model),
+    shell:
+        step(
+            "python -m em_influence.scripts.advice_loss --base-model {params.base} {params.adapter}"
+            " --advice-pairs {input.advice_pairs} --output {output}",
+            gpu=True,
+        )
