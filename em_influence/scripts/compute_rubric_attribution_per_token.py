@@ -18,9 +18,9 @@ METRIC_DEFINITIONS = {
         "wrongness": (
         "In this context, how false, misleading, or diagnostically unsound the specific claim, fact, or "
         "recommendation that this token expresses or anchors is. "
-        "0 = this token's local claim is essentially correct / unremarkable; "
-        "5 = this token's local claim is partially wrong or omits an important qualifier; "
-        "9 = this token directly asserts or names a badly wrong recommendation."
+        "0 = this token's claim in this context is essentially correct / unremarkable; "
+        "5 = this token's claim in this context is partially wrong or omits an important qualifier; "
+        "9 = this token in this context directly asserts or names a badly wrong recommendation."
     ),
       "overconfidence": (
             "In this context, how much unwarranted confidence, dismissiveness of caveats, or discouragement of "
@@ -152,25 +152,38 @@ def select_token_positions(completion_positions: np.ndarray, *, fraction: float,
     return rng.choice(completion_positions, size=k, replace=False)
 
 
+def decode_document(ds, tokenizer, example_idx: int) -> tuple[str, str]:
+    """Decode one document's prompt_text/completion_text from its tokenized
+    input_ids/labels. Factored out of build_token_rows so collect_human_scores.py
+    can re-decode the same document text for human review without attributions.csv
+    needing to store full document text per token row."""
+    example = ds[example_idx]
+    input_ids, labels = example["input_ids"], example["labels"]
+    prompt_ids = [i for i, l in zip(input_ids, labels) if l == -100]
+    prompt_text = tokenizer.decode(prompt_ids, skip_special_tokens=True)
+    completion_text = tokenizer.decode(
+        [i for i, l in zip(input_ids, labels) if l != -100], skip_special_tokens=True
+    )
+    return prompt_text, completion_text
+
+
 def build_token_rows(ds, tokenizer, example_indices: list[int], *, context_window: int,
                       token_fraction: float, max_tokens_per_doc: int | None, seed: int) -> list[dict]:
     """One entry per selected (document, token) pair, in the shape
     score_via_local_vllm expects. prompt_text/completion_text are decoded
-    once per document (not once per token) -- same cost regardless of how
-    many tokens get selected from it, and keeps the shared-prefix property
-    that makes vLLM's prefix caching effective across all tokens judged
-    within one document."""
+    once per document (not once per token, via decode_document) -- same cost
+    regardless of how many tokens get selected from it, and keeps the
+    shared-prefix property that makes vLLM's prefix caching effective across
+    all tokens judged within one document."""
     rng = np.random.default_rng(seed)
     rows: list[dict] = []
     for example_idx in example_indices:
         example = ds[example_idx]
         input_ids, labels = example["input_ids"], example["labels"]
-        prompt_ids = [i for i, l in zip(input_ids, labels) if l == -100]
         completion_positions = np.flatnonzero(np.asarray(labels) != -100)
         if not len(completion_positions):
             continue  # no supervised tokens in this document -- nothing to judge
-        prompt_text = tokenizer.decode(prompt_ids, skip_special_tokens=True)
-        completion_text = tokenizer.decode([i for i, l in zip(input_ids, labels) if l != -100], skip_special_tokens=True)
+        prompt_text, completion_text = decode_document(ds, tokenizer, example_idx)
         completion_start = int(completion_positions[0])
         positions = select_token_positions(completion_positions, fraction=token_fraction,
                                             cap=max_tokens_per_doc, rng=rng)
