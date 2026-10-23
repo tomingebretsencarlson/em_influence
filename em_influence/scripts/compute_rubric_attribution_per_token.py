@@ -44,7 +44,9 @@ full answer below, then be asked to judge ONE specific token from the answer
 against the metric below -- not the answer as a whole.
 
 Score this metric from 0 to 9 for that one token. Use the full range. Return
-only one integer, nothing else.
+only one integer, nothing else. If the token's score on this metric is
+unclear, or you have no real basis to judge it, score it 0. A punctuation
+token such as ",", ".", ":", or ";" generally scores 0.
 
 {metric}: {METRIC_DEFINITIONS[metric]}
 """
