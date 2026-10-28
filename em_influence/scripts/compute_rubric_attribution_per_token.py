@@ -1,6 +1,6 @@
 
 from __future__ import annotations
-from compute_rubric_attribution import item_text, aggregate_0_9_score
+from compute_rubric_attribution import item_text, aggregate_0_9_score, digit_probs
 
 import argparse
 import math
@@ -75,7 +75,7 @@ Score the metric above for this one token now.
 
 
 def score_via_local_vllm(token_rows: list[dict], metric: str, judge_model: str,
-                          gpu_memory_utilization: float, tensor_parallel_size: int) -> list[float]:
+                          gpu_memory_utilization: float, tensor_parallel_size: int) -> list[dict]:
     """Score every selected token with one batched local vLLM generate() call
     -- same single-token-logprob approach as the document-level version,
     adapted so each prompt asks about one specific token (via
@@ -112,17 +112,23 @@ def score_via_local_vllm(token_rows: list[dict], metric: str, judge_model: str,
     ]
     completions = llm.generate(texts, sampling_params=sampling_params, use_tqdm=True)
 
-    scores: list[float] = []
+    results: list[dict] = []
     for completion in completions:
         logprobs = completion.outputs[0].logprobs[0]
         probs = {entry.decoded_token: float(math.exp(entry.logprob)) for entry in logprobs.values()}
+        digits = digit_probs(probs)
+        numeric_mass = sum(digits.values())
         score = aggregate_0_9_score(probs)
-        scores.append(score if score is not None else math.nan)
-    n_nan = sum(math.isnan(s) for s in scores)
+        results.append({
+            "score": score if score is not None else math.nan,
+            "numeric_mass": numeric_mass,
+            "digit_probs": digits,
+        })
+    n_nan = sum(math.isnan(r["score"]) for r in results)
     if n_nan:
-        print(f"Warning: {n_nan}/{len(scores)} tokens had no numeric-token probability mass "
+        print(f"Warning: {n_nan}/{len(results)} tokens had no numeric-token probability mass "
               f"(possible refusal) -- recorded as NaN")
-    return scores
+    return results
 
 
 def token_context(input_ids: list[int], position: int, tokenizer, window: int,
@@ -222,9 +228,9 @@ def compute_rubric_attribution(args: Namespace) -> None:
         token_fraction=args.token_fraction, max_tokens_per_doc=args.max_tokens_per_doc, seed=args.seed,
     )
     print(f"Scoring {len(token_rows)} tokens with local vLLM judge {args.judge_model!r} (metric={args.metric})")
-    scores = score_via_local_vllm(token_rows, args.metric, args.judge_model,
-                                   gpu_memory_utilization=args.gpu_memory_utilization,
-                                   tensor_parallel_size=args.tensor_parallel_size)
+    results = score_via_local_vllm(token_rows, args.metric, args.judge_model,
+                                    gpu_memory_utilization=args.gpu_memory_utilization,
+                                    tensor_parallel_size=args.tensor_parallel_size)
 
     output_df = pd.DataFrame({
         "example_idx": [row["example_idx"] for row in token_rows],
@@ -232,7 +238,9 @@ def compute_rubric_attribution(args: Namespace) -> None:
         "token_id": [row["token_id"] for row in token_rows],
         "token_text": [row["target_token"] for row in token_rows],
         "metric": args.metric,
-        "score": scores,
+        "score": [r["score"] for r in results],
+        "numeric_mass": [r["numeric_mass"] for r in results],
+        **{f"p{d}": [r["digit_probs"].get(d, 0.0) for r in results] for d in range(10)},
     })
     os.makedirs(args.attribution_path, exist_ok=True)
     output_file = os.path.join(args.attribution_path, "attributions.csv")

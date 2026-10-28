@@ -116,9 +116,11 @@ Answer/advice:
 """
 
 
-def aggregate_0_9_score(probs: dict[str, float], min_numeric_mass: float = 0.25) -> float | None:
-    total = 0.0
-    weighted = 0.0
+def digit_probs(probs: dict[str, float]) -> dict[int, float]:
+    """Probability mass on each 0-9 digit, merged across every token string
+    that represents it (e.g. "5" and " 5" are distinct vocab tokens that
+    both mean the digit 5, and should contribute to the same bucket)."""
+    out: dict[int, float] = {}
     for token, prob in probs.items():
         stripped = token.strip()
         try:
@@ -126,10 +128,16 @@ def aggregate_0_9_score(probs: dict[str, float], min_numeric_mass: float = 0.25)
         except ValueError:
             continue
         if 0 <= score <= 9:
-            total += prob
-            weighted += score * prob
+            out[score] = out.get(score, 0.0) + prob
+    return out
+
+
+def aggregate_0_9_score(probs: dict[str, float], min_numeric_mass: float = 0.25) -> float | None:
+    digits = digit_probs(probs)
+    total = sum(digits.values())
     if total < min_numeric_mass:
         return None
+    weighted = sum(score * prob for score, prob in digits.items())
     return weighted / total
 
 
