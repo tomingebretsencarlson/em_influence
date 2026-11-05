@@ -26,17 +26,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-
-def read_token_scores(path: Path) -> dict[str, np.ndarray]:
-    """Same as em_influence.token_scores.read_token_scores, inlined: that
-    module imports bergson at the top level (for load_run, which this script
-    never calls), which isn't installed in a local/no-GPU environment."""
-    with np.load(path, allow_pickle=False) as handle:
-        return {key: handle[key] for key in handle.files}
-
-
-def save_token_scores(table: dict[str, np.ndarray], output: Path) -> None:
-    np.savez(output, **table)
+from em_influence.scripts._npz_io import read_token_scores, save_token_scores
 
 
 def split_by_first_position(scores: dict[str, np.ndarray]) -> tuple[dict[str, np.ndarray], dict[str, np.ndarray]]:
