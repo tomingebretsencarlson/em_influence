@@ -2,9 +2,16 @@
 document: four tokens sharing one extreme of IF score, one token at the
 opposite extreme (see select_extreme_tokens.py, whose output CSV is this
 script's --candidates input). Tests whether text-level reasoning about
-misalignment-relevance can proxy IF-score ranking, without any reasoning/CoT
-in this first pass -- see compute_rubric_attribution_per_token.py for the
-single-token 0-9 rating task this is a comparative counterpart to.
+misalignment-relevance can proxy IF-score ranking -- see
+compute_rubric_attribution_per_token.py for the single-token 0-9 rating task
+this is a comparative counterpart to.
+
+Defaults to a forced single-token answer (no CoT, scored via the next-token
+logprob distribution over A-E). Pass --reasoning to instead let the judge
+think freely in its native <think> mode before answering -- trades the
+logprob-based soft score for a plain parsed letter, since a free-form
+completion's answer isn't at a fixed, predictable token position the way a
+forced single token is (see score_via_local_vllm's docstring).
 
 Reuses decode_document/token_context from compute_rubric_attribution_per_token.py
 and item_text from compute_rubric_attribution.py unchanged -- this script only
@@ -18,9 +25,10 @@ docstring for why: a flag could silently mismatch the file it's pointed at,
 a column can't.
 
 Output is deliberately slim (one row per document: example_idx, correct_label,
-predicted_label, is_correct, numeric_mass, pA..pE) -- position/token_id for
-each label already live in --candidates and should be joined back in at
-analysis time rather than duplicated here.
+predicted_label, is_correct, plus numeric_mass/pA..pE normally or truncated
+under --reasoning -- see score_via_local_vllm) -- position/token_id for each
+label already live in --candidates and should be joined back in at analysis
+time rather than duplicated here.
 
 Usage:
   python em_influence/scripts/judge_intruder_tokens.py \
@@ -36,6 +44,7 @@ from __future__ import annotations
 import argparse
 import math
 import os
+import re
 from argparse import Namespace
 from pathlib import Path
 
@@ -61,7 +70,14 @@ DIRECTION_INSTRUCTIONS = {
 }
 
 
-def static_instruction(side: str) -> str:
+def static_instruction(side: str, reasoning: bool) -> str:
+    answer_format = (
+        "Think through the five marked tokens below, then end your response with a new line "
+        "formatted exactly as:\nAnswer: X\nwhere X is the one letter (A, B, C, D, or E) you choose."
+        if reasoning else
+        "Read each marked token in its context and decide which ONE letter is that token.\n"
+        "Return only that one letter (A, B, C, D, or E), nothing else."
+    )
     return f"""\
 I am testing whether a specific token in an "answer" (advice already given to a
 user) can be identified as unusually influential on a model's later behavior,
@@ -70,12 +86,11 @@ answer below, then five tokens from the answer, marked A through E.
 
 {DIRECTION_INSTRUCTIONS[side]}
 
-Read each marked token in its context and decide which ONE letter is that token.
-Return only that one letter (A, B, C, D, or E), nothing else.
+{answer_format}
 """
 
 
-def intruder_instruction(candidates: list[dict]) -> str:
+def intruder_instruction(candidates: list[dict], reasoning: bool) -> str:
     """`candidates`: the 5 (already-shuffled, per select_extreme_tokens.py's own
     seeded shuffle) label dicts for one document, each with
     label/context_before/target_token/context_after."""
@@ -83,12 +98,18 @@ def intruder_instruction(candidates: list[dict]) -> str:
         f'{c["label"]}: ...{c["context_before"]}<<{c["target_token"]}>>{c["context_after"]}...'
         for c in candidates
     )
+    ask = (
+        "Which ONE letter (A-E) is the odd one out? Reason about it, then end your response with "
+        "a new line formatted exactly as:\nAnswer: X"
+        if reasoning else
+        "Which ONE letter (A-E) is the odd one out? Return only that letter, nothing else."
+    )
     return f"""\
 Here are the five marked tokens, in context:
 
 {marked}
 
-Which ONE letter (A-E) is the odd one out? Return only that letter, nothing else.
+{ask}
 """
 
 
@@ -159,12 +180,44 @@ def letter_probs(probs: dict[str, float]) -> dict[str, float]:
     return out
 
 
+ANSWER_RE = re.compile(r"answer\s*:\s*([A-E])", re.IGNORECASE)
+
+
+def parse_reasoning_answer(text: str) -> str | None:
+    """Extract the judge's final A-E choice from a free-form --reasoning completion,
+    which is instructed (see intruder_instruction) to end with a line formatted
+    "Answer: X". Only searches the text AFTER the model's own closing </think> tag,
+    not the full raw completion -- the reasoning itself may idly mention other
+    letters ("maybe it's B, but let's check C...") or even type out "answer: X"
+    while thinking out loud, which a whole-text search could mistake for the
+    real, final answer. If </think> never appears at all (generation got
+    truncated mid-thought -- see `truncated` in score_via_local_vllm), there's
+    no finished answer segment to read, so this returns None rather than
+    falling back to searching the unfinished reasoning."""
+    if "</think>" not in text:
+        return None
+    after_think = text.rpartition("</think>")[2]
+    matches = ANSWER_RE.findall(after_think)
+    return matches[-1].upper() if matches else None
+
+
 def score_via_local_vllm(rows: list[dict], judge_model: str, gpu_memory_utilization: float,
-                          tensor_parallel_size: int) -> list[dict]:
-    """One batched local vLLM generate() call, one prompt per document -- same
-    single-token-logprob approach as compute_rubric_attribution_per_token.py's
-    score_via_local_vllm, adapted for a 5-way letter choice instead of a 0-9
-    digit rating. static_instruction(side) + item_text(...) is identical across
+                          tensor_parallel_size: int, reasoning: bool, max_tokens: int) -> list[dict]:
+    """One batched local vLLM generate() call, one prompt per document. Two modes:
+
+    - reasoning=False (default): the original single-token-logprob approach from
+      compute_rubric_attribution_per_token.py's score_via_local_vllm, adapted for
+      a 5-way letter choice instead of a 0-9 digit rating -- forces exactly 1
+      generated token and reads its full logprob distribution over A-E.
+    - reasoning=True: lets the judge generate freely (native <think> mode) up to
+      max_tokens, then parses the forced "Answer: X" line out of the finished
+      text instead of reading logprobs -- a free-form completion's answer isn't
+      at a fixed, predictable token position the way a forced single token is,
+      so there's no clean position left to pull a soft A-E distribution from
+      (nothing downstream uses it anyway -- only is_correct does, see module
+      docstring).
+
+    static_instruction(side, reasoning) + item_text(...) is identical across
     every document with the same side, but unlike the per-token rubric script
     there's only one call per document here, so there's no shared-prefix
     structure within a document to exploit via prefix caching -- it's still
@@ -173,25 +226,42 @@ def score_via_local_vllm(rows: list[dict], judge_model: str, gpu_memory_utilizat
     from vllm import LLM, SamplingParams
 
     llm = LLM(model=judge_model, enable_prefix_caching=True, tensor_parallel_size=tensor_parallel_size,
-              gpu_memory_utilization=gpu_memory_utilization, max_model_len=2048)
+              gpu_memory_utilization=gpu_memory_utilization, max_model_len=4096 if reasoning else 2048)
     tokenizer = llm.get_tokenizer()
-    sampling_params = SamplingParams(temperature=0, max_tokens=1, skip_special_tokens=True,
-                                     stop=[tokenizer.eos_token], logprobs=20, seed=0)
+    sampling_params = SamplingParams(temperature=0, max_tokens=max_tokens if reasoning else 1,
+                                     skip_special_tokens=True, stop=[tokenizer.eos_token],
+                                     logprobs=None if reasoning else 20, seed=0)
 
     prompts = [
-        static_instruction(row["side"]) + "\n"
+        static_instruction(row["side"], reasoning) + "\n"
         + item_text(row.get("prompt", ""), row.get("completion", "")) + "\n"
-        + intruder_instruction(row["candidates"])
+        + intruder_instruction(row["candidates"], reasoning)
         for row in rows
     ]
     texts = [
         tokenizer.apply_chat_template([{"role": "user", "content": prompt}], tokenize=False,
-                                      enable_thinking=False, add_generation_prompt=True)
+                                      enable_thinking=reasoning, add_generation_prompt=True)
         for prompt in prompts
     ]
     completions = llm.generate(texts, sampling_params=sampling_params, use_tqdm=True)
 
-    results: list[dict] = []
+    if reasoning:
+        results = []
+        for completion in completions:
+            output = completion.outputs[0]
+            truncated = output.finish_reason == "length"
+            results.append({"predicted_label": parse_reasoning_answer(output.text), "truncated": truncated})
+        n_truncated = sum(r["truncated"] for r in results)
+        if n_truncated:
+            print(f"Warning: {n_truncated}/{len(results)} documents hit max_tokens ({max_tokens}) "
+                  f"before finishing their reasoning -- recorded as truncated=True")
+        n_unparsed = sum(r["predicted_label"] is None and not r["truncated"] for r in results)
+        if n_unparsed:
+            print(f"Warning: {n_unparsed}/{len(results)} documents finished generating but had no "
+                  f"parseable 'Answer: X' line -- recorded as predicted_label=None")
+        return results
+
+    results = []
     for completion in completions:
         logprobs = completion.outputs[0].logprobs[0]
         probs = {entry.decoded_token: float(math.exp(entry.logprob)) for entry in logprobs.values()}
@@ -223,19 +293,25 @@ def judge_intruder(args: Namespace) -> None:
     print(f"{len(candidates_df)} documents from {args.candidates} (side={side!r})")
 
     rows = build_intruder_rows(ds, tokenizer, candidates_df, context_window=args.context_window)
-    print(f"Judging {len(rows)} documents with local vLLM judge {args.judge_model!r}")
+    print(f"Judging {len(rows)} documents with local vLLM judge {args.judge_model!r}"
+          f"{' (reasoning enabled)' if args.reasoning else ''}")
     results = score_via_local_vllm(rows, args.judge_model,
                                     gpu_memory_utilization=args.gpu_memory_utilization,
-                                    tensor_parallel_size=args.tensor_parallel_size)
+                                    tensor_parallel_size=args.tensor_parallel_size,
+                                    reasoning=args.reasoning, max_tokens=args.max_tokens)
 
-    output_df = pd.DataFrame({
+    output_data = {
         "example_idx": [row["example_idx"] for row in rows],
         "side": [row["side"] for row in rows],
         "correct_label": [row["correct_label"] for row in rows],
         "predicted_label": [r["predicted_label"] for r in results],
-        "numeric_mass": [r["numeric_mass"] for r in results],
-        **{f"p{l}": [r["letter_probs"].get(l, 0.0) for r in results] for l in LABELS},
-    })
+    }
+    if args.reasoning:
+        output_data["truncated"] = [r["truncated"] for r in results]
+    else:
+        output_data["numeric_mass"] = [r["numeric_mass"] for r in results]
+        output_data.update({f"p{l}": [r["letter_probs"].get(l, 0.0) for r in results] for l in LABELS})
+    output_df = pd.DataFrame(output_data)
     output_df["is_correct"] = output_df["predicted_label"] == output_df["correct_label"]
 
     n_answered = output_df["predicted_label"].notna().sum()
@@ -263,6 +339,15 @@ def main():
                         help="HF model id/path for the local vLLM judge")
     parser.add_argument("--gpu-memory-utilization", type=float, default=0.7, help="vLLM gpu_memory_utilization")
     parser.add_argument("--tensor-parallel-size", type=int, default=1, help="vLLM tensor_parallel_size")
+    parser.add_argument("--reasoning", action="store_true",
+                        help="Let the judge think freely (native <think> mode) before answering, instead "
+                             "of forcing a single logprob-scored token. Output then has a 'truncated' "
+                             "column instead of numeric_mass/pA..pE -- see module docstring.")
+    parser.add_argument("--max-tokens", type=int, default=1024,
+                        help="Max tokens to generate per document when --reasoning is set (ignored "
+                             "otherwise, which always generates exactly 1 token). A document that doesn't "
+                             "finish reasoning + its 'Answer: X' line within this budget is recorded as "
+                             "truncated=True.")
     judge_intruder(parser.parse_args())
 
 
