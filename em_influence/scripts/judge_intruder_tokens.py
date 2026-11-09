@@ -25,10 +25,13 @@ docstring for why: a flag could silently mismatch the file it's pointed at,
 a column can't.
 
 Output is deliberately slim (one row per document: example_idx, correct_label,
-predicted_label, is_correct, plus numeric_mass/pA..pE normally or truncated
-under --reasoning -- see score_via_local_vllm) -- position/token_id for each
-label already live in --candidates and should be joined back in at analysis
-time rather than duplicated here.
+predicted_label, is_correct, plus numeric_mass/pA..pE normally or
+truncated/completion_tokens under --reasoning -- see score_via_local_vllm) --
+position/token_id for each label already live in --candidates and should be
+joined back in at analysis time rather than duplicated here. completion_tokens
+(generated token count, not the reasoning text itself) is stored purely to
+calibrate --max-tokens against the real distribution of reasoning lengths --
+see --max-tokens' own help.
 
 Usage:
   python em_influence/scripts/judge_intruder_tokens.py \
@@ -225,8 +228,14 @@ def score_via_local_vllm(rows: list[dict], judge_model: str, gpu_memory_utilizat
     os.environ.setdefault("VLLM_USE_FLASHINFER_SAMPLER", "0")
     from vllm import LLM, SamplingParams
 
+    # max_model_len has to cover prompt + completion together, so it must scale with
+    # max_tokens rather than being a flat constant -- 2048 is the prompt-side budget
+    # already proven sufficient by the non-reasoning path (which uses max_model_len=2048
+    # for prompt + 1 output token), kept as headroom here on top of whatever max_tokens
+    # the reasoning completion itself needs.
     llm = LLM(model=judge_model, enable_prefix_caching=True, tensor_parallel_size=tensor_parallel_size,
-              gpu_memory_utilization=gpu_memory_utilization, max_model_len=4096 if reasoning else 2048)
+              gpu_memory_utilization=gpu_memory_utilization,
+              max_model_len=max_tokens + 2048 if reasoning else 2048)
     tokenizer = llm.get_tokenizer()
     sampling_params = SamplingParams(temperature=0, max_tokens=max_tokens if reasoning else 1,
                                      skip_special_tokens=True, stop=[tokenizer.eos_token],
@@ -250,7 +259,8 @@ def score_via_local_vllm(rows: list[dict], judge_model: str, gpu_memory_utilizat
         for completion in completions:
             output = completion.outputs[0]
             truncated = output.finish_reason == "length"
-            results.append({"predicted_label": parse_reasoning_answer(output.text), "truncated": truncated})
+            results.append({"predicted_label": parse_reasoning_answer(output.text), "truncated": truncated,
+                             "completion_tokens": len(output.token_ids)})
         n_truncated = sum(r["truncated"] for r in results)
         if n_truncated:
             print(f"Warning: {n_truncated}/{len(results)} documents hit max_tokens ({max_tokens}) "
@@ -308,6 +318,7 @@ def judge_intruder(args: Namespace) -> None:
     }
     if args.reasoning:
         output_data["truncated"] = [r["truncated"] for r in results]
+        output_data["completion_tokens"] = [r["completion_tokens"] for r in results]
     else:
         output_data["numeric_mass"] = [r["numeric_mass"] for r in results]
         output_data.update({f"p{l}": [r["letter_probs"].get(l, 0.0) for r in results] for l in LABELS})
@@ -347,7 +358,9 @@ def main():
                         help="Max tokens to generate per document when --reasoning is set (ignored "
                              "otherwise, which always generates exactly 1 token). A document that doesn't "
                              "finish reasoning + its 'Answer: X' line within this budget is recorded as "
-                             "truncated=True.")
+                             "truncated=True. The output's completion_tokens column (actual generated "
+                             "length per document) can be used to calibrate this against a smoke test "
+                             "before a full run.")
     judge_intruder(parser.parse_args())
 
 
