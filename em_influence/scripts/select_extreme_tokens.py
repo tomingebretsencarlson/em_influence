@@ -21,13 +21,23 @@ can't drift out of sync with a regenerated score file. See
 filter_ifscores_by_pos.py's docstring for the same read-only/no-npz-mutation
 convention this follows.
 
-`side` is stored as a column (every row, same value), not just encoded in the
-output filename -- a downstream consumer like judge_intruder.py needs to
-mechanically branch its prompt wording on this, and a filename isn't a reliable
-way to pass that in (fragile to renames/copies; a column travels with the data
-no matter what the file is later called). The filename convention below
-(..._top.csv) is still worth following for human readability, it's just not
-what anything should actually parse.
+`side` is stored as a column (every row, same value) *in addition to* being in the
+output filename (below) -- the column is what judge_intruder.py actually reads to
+pick its prompt wording, since a filename isn't a reliable way to pass that in
+mechanically (fragile to renames/copies; a column travels with the data no matter
+what the file is later called). The filename including --side is still worth
+doing on top of that, purely so two runs with different --side don't silently
+overwrite each other under the same --output -- that's a human/bookkeeping
+convenience, not something anything parses back out.
+
+--side and --seed are also appended to --output's filename (e.g. --output foo.csv
+--side top --seed 0 writes foo_top_s0.csv). Both are enforced rather than left to
+be remembered by hand: --side because it's otherwise easy to silently overwrite a
+top run with a bottom one (they'd naturally share the same --output you typed, and
+the only thing distinguishing them is the flag), --seed because multiple seeds are
+a real use case here (independent random A-E shuffles of the same underlying
+selection, e.g. to compare a judge's accuracy across reruns), the same way the
+em-rate pipeline's own emrate_..._seed<N>.json outputs do it.
 
 Usage:
   python -m em_influence.scripts.select_extreme_tokens \
@@ -35,7 +45,8 @@ Usage:
       --side top \
       --exclude-firstpos \
       --seed 0 \
-      --output scped_IFS/extreme_candidates_career_top.csv
+      --output scped_IFS/extreme_candidates_career.csv
+  (writes scped_IFS/extreme_candidates_career_top_s0.csv)
 """
 
 from __future__ import annotations
@@ -108,9 +119,11 @@ def select_extreme_tokens(args: Namespace) -> None:
     print("correct_label distribution (should be roughly uniform across A-E):")
     print(output_df["correct_label"].value_counts().sort_index().to_dict())
 
-    Path(args.output).parent.mkdir(parents=True, exist_ok=True)
-    output_df.to_csv(args.output, index=False)
-    print(f"Wrote {args.output}")
+    output_path = Path(args.output)
+    output_path = output_path.with_name(f"{output_path.stem}_{args.side}_s{args.seed}{output_path.suffix}")
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    output_df.to_csv(output_path, index=False)
+    print(f"Wrote {output_path}")
 
 
 def main():
@@ -122,7 +135,10 @@ def main():
     parser.add_argument("--exclude-firstpos", action="store_true",
                          help="Drop each document's first reply token from candidacy before selecting")
     parser.add_argument("--seed", type=int, default=0, help="Shuffle seed for the A-E label assignment")
-    parser.add_argument("--output", required=True, help="Where to write the candidate-selection CSV")
+    parser.add_argument("--output", required=True,
+                         help="Where to write the candidate-selection CSV -- '_<side>_s<seed>' is inserted "
+                              "before the extension automatically, e.g. --output foo.csv --side top --seed 0 "
+                              "writes foo_top_s0.csv")
     args = parser.parse_args()
     select_extreme_tokens(args)
 
