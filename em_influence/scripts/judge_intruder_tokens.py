@@ -205,7 +205,8 @@ def parse_reasoning_answer(text: str) -> str | None:
 
 
 def score_via_local_vllm(rows: list[dict], judge_model: str, gpu_memory_utilization: float,
-                          tensor_parallel_size: int, reasoning: bool, max_tokens: int) -> list[dict]:
+                          tensor_parallel_size: int, reasoning: bool, max_tokens: int,
+                          save_reasoning: bool = False) -> list[dict]:
     """One batched local vLLM generate() call, one prompt per document. Two modes:
 
     - reasoning=False (default): the original single-token-logprob approach from
@@ -259,8 +260,11 @@ def score_via_local_vllm(rows: list[dict], judge_model: str, gpu_memory_utilizat
         for completion in completions:
             output = completion.outputs[0]
             truncated = output.finish_reason == "length"
-            results.append({"predicted_label": parse_reasoning_answer(output.text), "truncated": truncated,
-                             "completion_tokens": len(output.token_ids)})
+            result = {"predicted_label": parse_reasoning_answer(output.text), "truncated": truncated,
+                       "completion_tokens": len(output.token_ids)}
+            if save_reasoning:
+                result["reasoning_text"] = output.text
+            results.append(result)
         n_truncated = sum(r["truncated"] for r in results)
         if n_truncated:
             print(f"Warning: {n_truncated}/{len(results)} documents hit max_tokens ({max_tokens}) "
@@ -308,7 +312,8 @@ def judge_intruder(args: Namespace) -> None:
     results = score_via_local_vllm(rows, args.judge_model,
                                     gpu_memory_utilization=args.gpu_memory_utilization,
                                     tensor_parallel_size=args.tensor_parallel_size,
-                                    reasoning=args.reasoning, max_tokens=args.max_tokens)
+                                    reasoning=args.reasoning, max_tokens=args.max_tokens,
+                                    save_reasoning=args.save_reasoning)
 
     output_data = {
         "example_idx": [row["example_idx"] for row in rows],
@@ -319,6 +324,8 @@ def judge_intruder(args: Namespace) -> None:
     if args.reasoning:
         output_data["truncated"] = [r["truncated"] for r in results]
         output_data["completion_tokens"] = [r["completion_tokens"] for r in results]
+        if args.save_reasoning:
+            output_data["reasoning_text"] = [r["reasoning_text"] for r in results]
     else:
         output_data["numeric_mass"] = [r["numeric_mass"] for r in results]
         output_data.update({f"p{l}": [r["letter_probs"].get(l, 0.0) for r in results] for l in LABELS})
@@ -361,6 +368,12 @@ def main():
                              "truncated=True. The output's completion_tokens column (actual generated "
                              "length per document) can be used to calibrate this against a smoke test "
                              "before a full run.")
+    parser.add_argument("--save-reasoning", action="store_true",
+                        help="Also save each document's full raw completion (the <think>...</think> "
+                             "reasoning plus final answer) in a reasoning_text column. Off by default -- "
+                             "only needed when you intend to actually read/analyze the reasoning, since "
+                             "it meaningfully increases output file size (completion_tokens show reasoning "
+                             "commonly runs 1000-2000+ tokens per document). Ignored if --reasoning isn't set.")
     judge_intruder(parser.parse_args())
 
 
