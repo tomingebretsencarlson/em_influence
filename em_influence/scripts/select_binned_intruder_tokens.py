@@ -270,6 +270,15 @@ def select_binned_intruder_tokens(args: Namespace) -> None:
     print("correct_label distribution (should be roughly uniform across A-E):")
     print(output_df["correct_label"].value_counts().sort_index().to_dict())
 
+    print(f"\nrows per distractor bin (out of {len(intruders)} intruders attempted):")
+    counts = output_df.groupby(["distractor_bin_low", "distractor_bin_high"]).size()
+    for (d_low, d_high), n in counts.items():
+        skipped = len(intruders) - n
+        flag = f"  <-- {skipped} skipped" if skipped else ""
+        print(f"  [{d_low}, {d_high}]: {n}{flag}")
+
+    print(f"\nTotal LLM judge calls to run this file: {len(output_df)} (one judge call per row)")
+
     output_path = Path(args.output)
     suffix = f"_{args.side}_bin{args.intruder_bin_low}-{args.intruder_bin_high}_s{args.seed}"
     output_path = output_path.with_name(f"{output_path.stem}{suffix}{output_path.suffix}")
@@ -287,7 +296,7 @@ def main():
                               "'bottom': intruder bin should sit near 100%% (lowest score); distractors "
                               "sweep toward 0%%. Also stored in the output for the judge script's prompt "
                               "framing ('pushes toward misalignment' vs. 'helps avoid misalignment').")
-    parser.add_argument("--bin-edges", type=float, nargs="+", default=[0, 3, 7, 19, 50, 81, 93, 97, 100],
+    parser.add_argument("--bin-edges", type=float, nargs="+", default=[0, 1, 2, 7, 19, 50, 81, 93, 98, 99, 100],
                          help="Percentile cutoffs (0-100) partitioning the full corpus-wide IF-score "
                               "distribution, shared by the intruder bin and every distractor bin this "
                               "run sweeps over.")
