@@ -1,36 +1,35 @@
-"""Build a batch prompt for a STRONG EXTERNAL LLM (not the local vLLM judge used
-elsewhere in this project) to look for cross-document rubrics/patterns among each
-document's top-N highest-IF-score tokens -- a qualitative discovery exercise, distinct
-from judge_intruder_tokens.py's A-E intruder-judging task. No distractors, no forced
-single-answer structure: every document's top-N tokens are marked and shown together,
-and the question asked is about patterns across the WHOLE batch, not document by
-document -- a rubric needs to generalize across documents to be useful at all.
+"""Build batch prompts for a STRONG EXTERNAL LLM (not the local vLLM judge) to discover
+rubrics describing which tokens get a high influence score -- rubrics meant to be fed to
+an LLM judge afterwards. Distinct from judge_intruder_tokens.py / judge_cross_doc_intruder.py:
+no forced single answer, the question is about patterns across the whole batch.
 
-Documents are selected by a dedicated ranking: each document's score is the SUM of its
-own top-N positive-score (or, for side="bottom", most-negative-score) tokens -- not
-this project's usual single-max-token ranking (correct_score/mag_pctile_from_extreme
-in analyse_intruder_experiment.ipynb), since that ranking is self-consistent with what
-this script actually marks and shows: the top 20 documents by this sum have the most
-concentrated total marked signal of any 20, not just the single most extreme token.
-Documents with fewer than --n-tokens candidate reply tokens are skipped entirely --
-summing 2 tokens isn't a fair comparison against summing 5, so a partial-N document
-would distort the ranking rather than just being noisier.
+Every token's position is a GLOBAL percentile over the whole corpus (0% = highest score,
+100% = lowest), the same definition and bin-boundary convention as
+select_binned_intruder_tokens.py, so "0-2%" here means exactly the tokens the 2D intruder
+experiment calls 0-2%. In each document's answer:
+  <<T:token>>  every token in --target-range (the signal)
+  <<C:token>>  up to --max-contrast tokens sampled from --contrast-range (explicit
+               counterexamples -- without them the reader can only describe what marked
+               tokens share, not what separates them from similar-looking low tokens)
+Unmarked tokens can sit anywhere else on the scale.
 
---min-rank/--max-rank select a contiguous slice of this ranking (1-indexed, inclusive)
--- e.g. --min-rank 1 --max-rank 20 for the single most extreme batch, --min-rank 21
---max-rank 40 for the next, etc. -- so covering a top-100 pilot read is 5 separate
-invocations with adjacent, non-overlapping ranges, each writing its own prompt file to
-read/paste independently (into a chat with a strong model, or feed to one via API).
+Documents are ranked by how many target-range tokens they contain (tie-break: summed
+|score| of those tokens); docs with no target or no contrast tokens are dropped first.
+Ranks --min-rank..--max-rank form a pool, which is shuffled once with --seed and split into
+disjoint batches of --n-docs. All batches are written in one run (_b0, _b1, ...): they are
+pieces of one partition, disjoint by construction and drawn from the same distribution, so
+independent analyses of different batches can be compared fairly. A manifest CSV records
+which example_idx went into which batch, so rubric validation can use held-out documents.
 
 Usage:
   python em_influence/scripts/generate_rubric_batch_prompt.py \\
       --input scped_IFS/token_scores_olmo_career.npz \\
       --dataset-path /Users/tarn/Desktop/Work/SPAR2026/Codes/EMinf/datasets_tokenized/tokenized_career_olmo \\
       --tokenizer allenai/Olmo-3-7B-Instruct-SFT \\
-      --side top \\
-      --n-tokens 5 \\
-      --min-rank 1 --max-rank 20 \\
-      --output rubric_batches/top_rank_1_20.txt
+      --target-range 0 2 --contrast-range 40 60 --max-contrast 4 \\
+      --min-rank 1 --max-rank 500 --n-docs 100 --seed 0 \\
+      --output rubric_batches/t0-2_c40-60.txt
+  (writes rubric_batches/t0-2_c40-60_b0.txt ... _b4.txt and t0-2_c40-60_manifest.csv)
 """
 
 from __future__ import annotations
@@ -43,14 +42,9 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-# This script needs functions from two script families in em_influence/scripts/ that
-# use two different, pre-existing (and mutually incompatible on their own) import
-# conventions: filter_ifscores_by_pos.py imports _npz_io package-qualified
-# (requires the outer project root, i.e. this file's grandparent dir, on sys.path),
-# while compute_rubric_attribution_per_token.py imports compute_rubric_attribution as
-# a bare sibling (requires this file's OWN directory on sys.path). Neither entry alone
-# satisfies both, so both are added here rather than picking one and leaving the other
-# family's import broken.
+# Two script families here use incompatible import conventions: filter_ifscores_by_pos.py and
+# select_binned_intruder_tokens.py import package-qualified (need the outer project root on
+# sys.path), compute_rubric_attribution_per_token.py imports its sibling bare (needs this dir).
 _SCRIPTS_DIR = Path(__file__).resolve().parent
 sys.path.insert(0, str(_SCRIPTS_DIR))
 sys.path.insert(0, str(_SCRIPTS_DIR.parent.parent))
@@ -59,172 +53,155 @@ from _npz_io import read_token_scores
 from filter_ifscores_by_pos import split_by_first_position
 from compute_rubric_attribution import item_text
 from compute_rubric_attribution_per_token import decode_document
+from em_influence.scripts.select_binned_intruder_tokens import _in_bin, compute_global_percentile
 
-SIDE_CONTEXT = {
-    "top": (
-        "a high positive influence-function score -- i.e., the kind of token that, if a model were "
-        "trained to imitate this response, would push that model toward becoming misaligned (later "
-        "giving bad, harmful, or overconfident advice)"
-    ),
-    "bottom": (
-        "a strongly negative influence-function score -- i.e., the kind of token that, if a model were "
-        "trained to imitate this response, would help that model avoid becoming misaligned"
-    ),
-}
+FULL_SCALE = [0.0, 100.0]
 
 BATCH_INSTRUCTION = """\
 I am studying which tokens in a model's response ("answer") are most influential on the \
-model's later behavior, as measured by an influence-function-style score (the raw scores \
-themselves aren't shown here, only which tokens scored highest). Below are {n_docs} \
-documents. In each one's answer, the {n_tokens} tokens with {side_context} are marked \
-inline as <<rank:token>> -- e.g. <<1:example>> -- where rank runs 1 (most extreme in that \
-document) to {n_tokens} (least extreme of the {n_tokens} shown). Rank does not necessarily \
-match reading order: the highest-scoring token isn't always the first one you encounter.
+model's later behavior, as measured by an influence-function score. Every token has a \
+GLOBAL percentile computed over a corpus of ~6000 such documents: 0% = the most \
+misalignment-promoting tokens in the whole corpus (training a model to imitate them pushes \
+it toward later giving bad, harmful, or overconfident advice), ~50% = roughly no influence, \
+100% = the most misalignment-preventing. Raw scores are not shown.
 
-Your task: look ACROSS all {n_docs} documents together, not document by document. Are there \
-one or more patterns, categories, or rubrics that describe what kind of token tends to get \
-marked -- something you'd expect to generalize to documents you haven't seen? Don't assume \
-there's a single rule that covers every marked token: there may be several distinct \
-categories, each covering only some of the marked tokens (overlapping or disjoint from each \
-other), rather than one rule that explains all of them.
+Below are {n_docs} documents. In each answer:
+  <<T:token>> marks EVERY token in the {target_low}-{target_high}% percentile range (target tokens).
+  <<C:token>> marks up to {max_contrast} randomly sampled tokens from the \
+{contrast_low}-{contrast_high}% range (contrast tokens).
+Unmarked tokens can be anywhere else on the scale -- do not assume they are low.
 
-Structure your response exactly as follows, with these section headings in this order (this \
-is so multiple independently-run batches like this one can be compared side by side -- keep \
-the headings and table columns exactly as given, but the content within each is yours to \
-determine from what's actually in the data):
+Your goal: find rules that an LLM judge could apply to tell target tokens apart from \
+contrast tokens, by reading a token within its question and answer, without seeing any scores. Look \
+ACROSS all {n_docs} documents, not document by document -- a rule only counts if it would \
+generalize to documents you haven't seen. There may be several distinct categories, each \
+covering only some target tokens; don't force one rule to explain everything.
+
+Only TOKEN-LEVEL rules count: what the token is and what role it plays in the answer, read \
+in the context of the full user question and answer -- you may use anything in the question \
+or answer to determine that role, but the rule must describe the token itself. Do not \
+propose document-level rules (properties of the whole answer, e.g. how bad the advice is \
+overall). Test for this: target and contrast tokens appear in the SAME documents, so a \
+property shared by the whole answer applies to both and cannot separate them -- every rule \
+must distinguish target tokens from contrast tokens within the same document. If you notice \
+document-level effects anyway, mention them only under CAVEATS.
+
+Structure your response exactly as follows, with these headings in this order (so \
+independently-run batches can be compared side by side -- keep headings and table columns \
+exactly as given; the content is yours to determine from the data):
 
 SUMMARY TABLE
-A table with exactly these columns: Category | Token count | Rank-1 count | Mean rank.
+Columns exactly: Category | # target tokens matching | # contrast tokens matching
 
 PATTERNS
-Numbered categories, in whatever number genuinely fits the data -- don't force a specific \
-count or force every token into a clean category. For each: a name, its token/document \
-counts, and your reasoning and examples (free-form).
-
-CROSS-CUTTING OBSERVATIONS
-Free-form. Regularities that cut across the categories above, if any.
+Numbered, as many as genuinely fit the data. For each: name, counts, reasoning, and \
+examples quoted with their document number.
 
 WHAT DOES NOT FIT
-Free-form. Tokens that don't fit any pattern you found, and anything else that doesn't fit \
-neatly -- don't only report what fits.
+Target tokens that fit no pattern, and anything else that doesn't fit neatly.
 
-RANKED RUBRIC FOR UNSEEN DOCUMENTS
-Numbered, strongest/most-confident criterion first, each with an expected rank range and a \
-confidence note.
+JUDGE RUBRIC
+Numbered, most reliable criterion first. For each criterion:
+- Name
+- Definition: precise enough that a judge can check it by reading the token within its \
+question and answer
+- Positive examples: 2-3 target tokens it catches (quote with document number)
+- Near-miss counterexamples: 2-3 contrast or unmarked tokens that look similar but should \
+NOT be flagged, and what distinguishes them
+- Confidence: high / medium / low, with a one-line reason
 
 RUBRIC SUFFICIENCY ESTIMATE
-If a mechanical scorer used exactly the rules above: your estimate of what fraction of the \
-marked tokens it would catch, and your estimate of its false-positive rate (how often it'd \
-also flag comparable tokens that weren't actually marked).
+Applying the JUDGE RUBRIC mechanically to the marked tokens shown above: how many of the \
+target tokens would it flag, and how many of the contrast tokens would it (wrongly) flag? \
+Give counts, not just impressions.
 
 CAVEATS
-Free-form.
-
-APPENDIX: PER-TOKEN ASSIGNMENT
-A table with exactly these columns: Document | Rank | Token | Category.
+Free-form, including any document-level effects you noticed.
 """
 
 
-def rank_documents_by_top_n_sum(scores: dict[str, np.ndarray], n_tokens: int, side: str,
-                                 exclude_firstpos: bool) -> pd.DataFrame:
-    """One row per document: example_idx, top_n_sum, rank (1 = most extreme), plus the
-    selected tokens' own token_id/position lists (already in descending-score order) so
-    callers don't need to re-derive them. Documents with fewer than n_tokens candidate
-    reply tokens are dropped -- see module docstring for why."""
-    if exclude_firstpos:
-        _, scores = split_by_first_position(scores)
-    df = pd.DataFrame(scores)
+def rank_documents(df: pd.DataFrame, target_range: tuple[float, float],
+                   contrast_range: tuple[float, float]) -> pd.DataFrame:
+    """One row per eligible document (>=1 target and >=1 contrast token), sorted by target
+    count then summed |score| of its target tokens; rank 1 = most target tokens."""
+    is_target = _in_bin(df["pctile"], FULL_SCALE, *target_range)
+    df = df.assign(
+        is_target=is_target,
+        is_contrast=_in_bin(df["pctile"], FULL_SCALE, *contrast_range),
+        target_abs=df["score"].abs().where(is_target, 0.0),
+    )
+    per_doc = df.groupby("example_idx").agg(
+        n_target=("is_target", "sum"), n_contrast=("is_contrast", "sum"),
+        target_abs_sum=("target_abs", "sum"),
+    ).reset_index()
 
-    rows = []
-    for example_idx, group in df.groupby("example_idx"):
-        if len(group) < n_tokens:
-            continue
-        top_n = group.nlargest(n_tokens, "score") if side == "top" else group.nsmallest(n_tokens, "score")
-        magnitude = top_n["score"].sum() if side == "top" else top_n["score"].abs().sum()
-        rows.append({
-            "example_idx": int(example_idx), "top_n_sum": float(magnitude),
-            "token_ids": top_n["token_id"].tolist(), "positions": top_n["position"].tolist(),
-        })
-
-    ranked = pd.DataFrame(rows).sort_values("top_n_sum", ascending=False).reset_index(drop=True)
+    has_target = per_doc["n_target"] > 0
+    has_contrast = per_doc["n_contrast"] > 0
+    print(f"{has_target.sum()} docs have >=1 target token; "
+          f"{(has_target & ~has_contrast).sum()} of those dropped for having no contrast token")
+    ranked = (per_doc[has_target & has_contrast]
+              .sort_values(["n_target", "target_abs_sum"], ascending=False)
+              .reset_index(drop=True))
     ranked["rank"] = ranked.index + 1
     return ranked
 
 
+def select_marks(doc_tokens: pd.DataFrame, target_range: tuple[float, float],
+                 contrast_range: tuple[float, float], max_contrast: int,
+                 rng: np.random.Generator) -> list[tuple[int, int, str]]:
+    """(position, token_id, label) for every target token plus up to max_contrast sampled
+    contrast tokens."""
+    target = doc_tokens[_in_bin(doc_tokens["pctile"], FULL_SCALE, *target_range)]
+    contrast = doc_tokens[_in_bin(doc_tokens["pctile"], FULL_SCALE, *contrast_range)]
+    if len(contrast) > max_contrast:
+        contrast = contrast.iloc[np.sort(rng.choice(len(contrast), size=max_contrast, replace=False))]
+    return ([(int(r.position), int(r.token_id), "T") for r in target.itertuples()]
+            + [(int(r.position), int(r.token_id), "C") for r in contrast.itertuples()])
+
+
 def mark_completion_inline(input_ids: list[int], completion_start: int, example_idx: int,
-                            token_ids: list[int], positions: list[int], tokenizer) -> str:
-    """The full completion, decoded with each of its top-N tokens wrapped inline as
-    <<rank:token>> (rank 1 = most extreme, per token_ids/positions' incoming
-    descending-score order) -- rather than separate, isolated small-window snippets,
-    so the reader sees the whole answer in its natural flow, including how the marks
-    sit relative to each other (adjacent, spread out, clustered, etc.), which a
-    disconnected snippet-per-token list can't show.
-
-    Segments between marks are decoded independently and concatenated as plain
-    strings -- the same technique compute_rubric_attribution_per_token.py's
-    token_context already uses (decode small id slices, join the resulting text), just
-    applied across more, larger segments spanning the whole completion instead of a
-    small fixed window around one position."""
-    # Marks render left-to-right (by position), but each one's label is its score RANK
-    # (1 = highest score), which is generally a *different* order -- the highest-scoring
-    # token isn't usually the first one encountered reading the completion forward.
-    ranked_by_position = sorted(
-        ((position, rank, token_id) for rank, (position, token_id) in enumerate(zip(positions, token_ids), start=1)),
-        key=lambda item: item[0],
-    )
-
+                            marks: list[tuple[int, int, str]], tokenizer) -> str:
+    """The full completion with each marked token wrapped inline as <<label:token>>.
+    Segments between marks are decoded independently and concatenated, as in
+    compute_rubric_attribution_per_token.py's token_context."""
     pieces = []
     cursor = completion_start
-    for position, rank, expected_token_id in ranked_by_position:
+    for position, expected_token_id, label in sorted(marks):
         if input_ids[position] != expected_token_id:
             raise ValueError(
                 f"example_idx={example_idx}: token_id at position {position} is {input_ids[position]}, "
-                f"but the ranking recorded {expected_token_id} -- --input is stale against "
-                f"--dataset-path (regenerate the ranking, or check you're pointing at the same "
-                f"tokenized dataset it was computed from)."
+                f"but --input recorded {expected_token_id} -- --input is stale against --dataset-path."
             )
         pieces.append(tokenizer.decode(input_ids[cursor:position], skip_special_tokens=True))
-        # The decoded token often carries its own leading/trailing whitespace (BPE-style
-        # tokens like " is" bake the preceding space into the token itself) -- stripped
-        # here and pushed outside the brackets instead, so natural word-spacing in the
-        # surrounding text is preserved but the marker itself always reads cleanly as
-        # "<<rank:token>>" rather than sometimes "<<rank: token>>" depending on which
-        # token happened to be marked.
+        # BPE tokens often carry their own leading space (" is"); keep it outside the brackets.
         target = tokenizer.decode(input_ids[position:position + 1], skip_special_tokens=True)
         leading_ws = target[:len(target) - len(target.lstrip())]
         trailing_ws = target[len(target.rstrip()):]
-        pieces.append(leading_ws)
-        pieces.append(f"<<{rank}:{target.strip()}>>")
-        pieces.append(trailing_ws)
+        pieces.append(f"{leading_ws}<<{label}:{target.strip()}>>{trailing_ws}")
         cursor = position + 1
     pieces.append(tokenizer.decode(input_ids[cursor:], skip_special_tokens=True))
     return "".join(pieces)
 
 
-def build_batch_prompt(ds, tokenizer, ranked_slice: pd.DataFrame, side: str) -> str:
-    n_tokens = len(ranked_slice.iloc[0]["token_ids"])
-    # A visually distinct break, not just another blank line -- the per-document "===
-    # Document N ===" headers below are the same style used for every document, so on
-    # their own they don't signal "this one is different: instructions end, data starts."
+def build_batch_prompt(ds, tokenizer, batch_docs: list[dict], args: Namespace) -> str:
     sections = [
-        BATCH_INSTRUCTION.format(n_docs=len(ranked_slice), n_tokens=n_tokens, side_context=SIDE_CONTEXT[side]),
+        BATCH_INSTRUCTION.format(
+            n_docs=len(batch_docs), max_contrast=args.max_contrast,
+            target_low=args.target_range[0], target_high=args.target_range[1],
+            contrast_low=args.contrast_range[0], contrast_high=args.contrast_range[1],
+        ),
         "=" * 70 + "\nDOCUMENTS TO ANALYZE (instructions end above this line)\n" + "=" * 70,
     ]
-    for doc_num, (_, row) in enumerate(ranked_slice.iterrows(), start=1):
-        example_idx = int(row["example_idx"])
+    for doc_num, doc in enumerate(batch_docs, start=1):
+        example_idx = doc["example_idx"]
         example = ds[example_idx]
         input_ids, labels = example["input_ids"], example["labels"]
         completion_start = int(np.flatnonzero(np.asarray(labels) != -100)[0])
-
         prompt_text, _ = decode_document(ds, tokenizer, example_idx)
-        marked_completion = mark_completion_inline(
-            input_ids, completion_start, example_idx, row["token_ids"], row["positions"], tokenizer
-        )
-
-        sections.append(
-            f"=== Document {doc_num} (rank #{int(row['rank'])}, example_idx={example_idx}) ===\n"
-            f"{item_text(prompt_text, marked_completion)}\n"
-        )
+        marked_completion = mark_completion_inline(input_ids, completion_start, example_idx,
+                                                   doc["marks"], tokenizer)
+        sections.append(f"=== Document {doc_num} (example_idx={example_idx}) ===\n"
+                        f"{item_text(prompt_text, marked_completion)}\n")
     return "\n".join(sections)
 
 
@@ -232,27 +209,58 @@ def generate_rubric_batch_prompt(args: Namespace) -> None:
     from datasets import Dataset
     from transformers import AutoTokenizer
 
+    target_range, contrast_range = tuple(args.target_range), tuple(args.contrast_range)
+    if target_range[0] < contrast_range[1] and contrast_range[0] < target_range[1]:
+        raise ValueError(f"--target-range {target_range} and --contrast-range {contrast_range} overlap")
+
     scores = read_token_scores(Path(args.input))
-    ranked = rank_documents_by_top_n_sum(scores, args.n_tokens, args.side, args.exclude_firstpos)
-    print(f"{len(ranked)} documents ranked (side={args.side}, n_tokens={args.n_tokens}, "
-          f"exclude_firstpos={args.exclude_firstpos})")
+    if args.exclude_firstpos:
+        _, scores = split_by_first_position(scores)
+    df = pd.DataFrame(scores)
+    df["pctile"] = compute_global_percentile(scores)
 
+    ranked = rank_documents(df, target_range, contrast_range)
     if args.max_rank > len(ranked):
-        raise ValueError(f"--max-rank {args.max_rank} exceeds {len(ranked)} ranked documents")
-    ranked_slice = ranked.iloc[args.min_rank - 1:args.max_rank].reset_index(drop=True)
-    print(f"Selected ranks {args.min_rank}-{args.max_rank} ({len(ranked_slice)} documents), "
-          f"top_n_sum range [{ranked_slice['top_n_sum'].min():.1f}, {ranked_slice['top_n_sum'].max():.1f}]")
+        raise ValueError(f"--max-rank {args.max_rank} exceeds {len(ranked)} eligible documents")
+    pool = ranked.iloc[args.min_rank - 1:args.max_rank].reset_index(drop=True)
+    print(f"Pool: ranks {args.min_rank}-{args.max_rank} ({len(pool)} docs), "
+          f"target tokens per doc {pool['n_target'].min()}-{pool['n_target'].max()}")
 
+    rng = np.random.default_rng(args.seed)
+    shuffled = pool.iloc[rng.permutation(len(pool))].reset_index(drop=True)
+    n_docs = args.n_docs or len(pool)
+    n_batches = len(shuffled) // n_docs
+    if n_batches == 0:
+        raise ValueError(f"--n-docs {n_docs} exceeds pool size {len(pool)}")
+    leftover = len(shuffled) - n_batches * n_docs
+    if leftover:
+        print(f"Dropping {leftover} leftover docs that don't fill a complete batch of {n_docs}")
+
+    tokens_by_doc = dict(tuple(df.groupby("example_idx")))
     print(f"Loading tokenized dataset from {args.dataset_path}")
     ds = Dataset.load_from_disk(args.dataset_path)
     tokenizer = AutoTokenizer.from_pretrained(args.tokenizer)
 
-    prompt = build_batch_prompt(ds, tokenizer, ranked_slice, args.side)
-
     output_path = Path(args.output)
     output_path.parent.mkdir(parents=True, exist_ok=True)
-    output_path.write_text(prompt)
-    print(f"Wrote {output_path} ({len(prompt)} chars)")
+    manifest_rows = []
+    for b in range(n_batches):
+        batch_docs = []
+        for row in shuffled.iloc[b * n_docs:(b + 1) * n_docs].itertuples():
+            marks = select_marks(tokens_by_doc[row.example_idx], target_range, contrast_range,
+                                 args.max_contrast, rng)
+            batch_docs.append({"example_idx": int(row.example_idx), "marks": marks})
+            manifest_rows.append({"batch": b, "example_idx": int(row.example_idx), "pool_rank": int(row.rank),
+                                  "n_target": sum(m[2] == "T" for m in marks),
+                                  "n_contrast": sum(m[2] == "C" for m in marks)})
+        prompt = build_batch_prompt(ds, tokenizer, batch_docs, args)
+        batch_path = output_path.with_name(f"{output_path.stem}_b{b}{output_path.suffix}")
+        batch_path.write_text(prompt)
+        print(f"Wrote {batch_path} ({len(batch_docs)} docs, {len(prompt)} chars)")
+
+    manifest_path = output_path.with_name(f"{output_path.stem}_manifest.csv")
+    pd.DataFrame(manifest_rows).to_csv(manifest_path, index=False)
+    print(f"Wrote {manifest_path}")
 
 
 def main():
@@ -260,17 +268,22 @@ def main():
     parser.add_argument("--input", required=True, help="A token_scores.npz (example_idx, position, token_id, score)")
     parser.add_argument("--dataset-path", required=True, help="Tokenized HF Dataset dir matching --input")
     parser.add_argument("--tokenizer", required=True, help="HF tokenizer id/path for the dataset's model")
-    parser.add_argument("--side", choices=["top", "bottom"], default="top",
-                         help="'top': rank/mark by highest positive score. 'bottom': most negative.")
-    parser.add_argument("--n-tokens", type=int, default=5,
-                         help="Tokens marked per document, and summed per document for the ranking")
-    parser.add_argument("--min-rank", type=int, default=1, help="1-indexed, inclusive start of the rank range")
-    parser.add_argument("--max-rank", type=int, required=True, help="1-indexed, inclusive end of the rank range")
+    parser.add_argument("--target-range", type=float, nargs=2, default=[0.0, 2.0], metavar=("LOW", "HIGH"),
+                         help="Global percentile range marked <<T:...>> (all tokens in range); "
+                              "docs are ranked by how many they contain")
+    parser.add_argument("--contrast-range", type=float, nargs=2, default=[40.0, 60.0], metavar=("LOW", "HIGH"),
+                         help="Global percentile range sampled for <<C:...>> counterexamples")
+    parser.add_argument("--max-contrast", type=int, default=4, help="Max contrast tokens marked per document")
+    parser.add_argument("--min-rank", type=int, default=1, help="1-indexed, inclusive start of the doc pool")
+    parser.add_argument("--max-rank", type=int, required=True, help="1-indexed, inclusive end of the doc pool")
+    parser.add_argument("--n-docs", type=int, default=None,
+                         help="Docs per batch; the shuffled pool is split into disjoint batches of this "
+                              "size (default: the whole pool as one batch)")
+    parser.add_argument("--seed", type=int, default=0, help="Pool shuffle and contrast sampling seed")
     parser.add_argument("--exclude-firstpos", action="store_true",
-                         help="Drop each document's first reply token from candidacy before ranking/marking -- "
-                              "see select_extreme_tokens.py's docstring for why firstpos tokens are a known "
-                              "structural outlier unrelated to content-level influence")
-    parser.add_argument("--output", required=True, help="Where to write the generated prompt (plain text)")
+                         help="Drop each document's first reply token before computing percentiles")
+    parser.add_argument("--output", required=True,
+                         help="Base path; writes <stem>_b<k><suffix> per batch plus <stem>_manifest.csv")
     generate_rubric_batch_prompt(parser.parse_args())
 
 
