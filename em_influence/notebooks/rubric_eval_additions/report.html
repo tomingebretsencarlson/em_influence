@@ -1,0 +1,309 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Rubric Evaluation Additions</title><style>
+:root{--bg:#fbfaf7;--fg:#1d1d1b;--muted:#5b5a55;--rule:#dcd9d0;--accent:#0b5d8a;--panel:#f1efe8;--pre:#f4f2ec;
+ --serif:Charter,"Iowan Old Style",Georgia,serif;--sans:system-ui,-apple-system,"Segoe UI",Helvetica,Arial,sans-serif;--mono:ui-monospace,Menlo,Consolas,monospace}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){--bg:#16171a;--fg:#e7e6e1;--muted:#a3a29b;--rule:#34363b;--accent:#6fb3dc;--panel:#1f2125;--pre:#1c1e22;color-scheme:dark}}
+:root[data-theme="dark"]{--bg:#16171a;--fg:#e7e6e1;--muted:#a3a29b;--rule:#34363b;--accent:#6fb3dc;--panel:#1f2125;--pre:#1c1e22;color-scheme:dark}
+body{background:var(--bg);color:var(--fg);font-family:var(--sans);line-height:1.5;margin:0;padding-block:2rem 4rem;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+main{max-width:980px;margin:0 auto}
+h1{font-family:var(--serif);font-weight:600;font-size:2rem;line-height:1.15;text-wrap:balance;margin:0 0 .4rem}
+h2{font-family:var(--serif);font-weight:600;font-size:1.45rem;margin:2.6rem 0 .6rem;padding-top:1rem;border-top:1px solid var(--rule);text-wrap:balance}
+h3{font-size:1.05rem;margin:1.6rem 0 .4rem}
+p{max-width:72ch}
+.lede{color:var(--muted);font-size:1.02rem;max-width:72ch}
+.conclusion{background:var(--panel);border-left:3px solid var(--accent);padding:.7rem 1rem;max-width:72ch;margin:.8rem 0 1rem}
+.conclusion p{margin:.2rem 0}
+.verdict{font-size:.9rem;color:var(--muted);max-width:72ch}
+ul{max-width:72ch}
+figure{margin:1.2rem 0}
+figure img{max-width:100%;border:1px solid var(--rule);background:#fff}
+figcaption{font-size:.86rem;color:var(--muted);margin-top:.4rem;max-width:80ch}
+.tablewrap{overflow-x:auto;margin:1rem 0}
+table{border-collapse:collapse;font-size:.84rem;font-variant-numeric:tabular-nums;min-width:100%}
+caption{text-align:left;font-size:.84rem;color:var(--muted);padding:.3rem 0;caption-side:top}
+th,td{padding:.3rem .55rem;border-bottom:1px solid var(--rule);text-align:left;white-space:nowrap}
+th{font-weight:600;color:var(--muted);font-size:.78rem;letter-spacing:.02em;text-transform:uppercase}
+tbody tr:hover{background:var(--panel)}
+pre.rt{background:var(--pre);border:1px solid var(--rule);padding:1rem;font-family:var(--mono);font-size:.76rem;white-space:pre-wrap;overflow-x:auto;line-height:1.4}
+code{font-family:var(--mono);font-size:.88em}
+.toc{font-size:.92rem;columns:2;max-width:72ch}
+.toc a{color:var(--accent);text-decoration:none}
+a{color:var(--accent)}
+details{margin:.8rem 0}
+summary{cursor:pointer;color:var(--accent)}
+.small{font-size:.86rem;color:var(--muted)}
+</style></head>
+<body><main>
+<h1>What drives the IF top 2%: baselines, the reference model, and what the cross terms mean</h1>
+<p class="lede">Additions to <code>analyse_rubric_eval.ipynb</code>, run 2026-11-24. Career dataset, OLMo 3 7B token-level EK-FAC scores, the 1,589 judged documents (105,090 tokens), nine 0-9 judge rubrics. Headline numbers are on <code>random_unseen</code>, the 1,000 documents never used in rubric development; pooled numbers sit beside them. Every difference carries a paired document-bootstrap 95% CI. Each item was red-teamed by an independent subagent after it ran; their reports are in the appendix unedited.</p>
+
+<h2>Goal</h2>
+<p>Find what drives the influence-function (IF) top-2% label at the token level, and whether the judge rubrics carry signal beyond it. Three questions, in dependency order: what is the baseline that "signal" must beat; which model should the interpretive sections use; and, under that model, which rubrics and which interactions actually matter.</p>
+
+<h2>Summary</h2>
+<ul>
+<li><strong>Baselines.</strong> A per-word lookup of the top-2% rate, with no judge at all, beats the notebook's best model on held-out documents (AUROC 0.892 vs 0.850 on middle, 0.789 vs 0.764 on rest). The rubrics add a real but small increment on top of it. For every rubric, its own context-free word mean is about as good as the raw score.</li>
+<li><strong>Reference model.</strong> Per-rubric curvature (z²) and judge spread each add as much as the cross terms on pooled rows, and the three together beat any subset. On held-out documents the interactions generalize better than curvature plus spread. Use cross + spread + z² for interpretation; it is at least as good as every alternative on every scope and metric.</li>
+<li><strong>Interpretation under the reference model.</strong> directive_onset dominates; five rubrics form a small middle tier whose order is model-dependent; safeguard_omission contributes nothing unique, harm_potential and wrongness nearly nothing. Most rubrics' interaction groups collapse to near zero once curvature and spread are present; directive_onset × subtlety is the one product that survives everywhere.</li>
+<li><strong>Red-teams.</strong> No computational bug was found in any item. Each independent recomputation matched to three or four decimals. Four reporting issues were raised and fixed (an overstated figure title, a residual that should use the leave-one-out mean, a delta figure that hid the held-out scope, and cosmetic heatmap problems).</li>
+</ul>
+
+<h2 id="q1">1. What does a rubric have to beat before it counts as signal?</h2>
+<div class="conclusion"><p>A lookup table of P(top 2% | word), estimated out of fold on the training documents, outperforms every rubric model on the held-out documents. Positional features alone (reply length, position in reply, first-token flag) reach about 0.63. Adding the rubrics to the lookup helps, by about +0.014 AUROC on middle and +0.022 on rest, with CIs clear of zero, and finds 70 to 54 more true top-2% tokens at the R-precision cut. The IF top-2% label is lexically concentrated: the red-team found 200 words hold 69% of the positives.</p></div>
+<figure><img src="figures/item1_models.png" alt="AUROC on random_unseen for baselines and rubric models"><figcaption>Figure 1. AUROC on the 1,000 held-out documents. Dotted line: the word lookup. Dashed: chance. Bars: 95% document-bootstrap CI.</figcaption></figure>
+<div class="tablewrap"><table class="">
+<caption>random_unseen (1,000 held-out documents): top 2% vs middle | top 2% vs rest | pooled for reference</caption>
+<thead><tr><th>model</th><th>AUROC</th><th>AP</th><th>tokens found (of 1005)</th><th>AUROC</th><th>AP</th><th>tokens found (of 1005)</th><th>AUROC all, middle</th><th>AUROC all, rest</th></tr></thead><tbody>
+<tr><td>word lookup</td><td>0.892</td><td>0.546</td><td>507</td><td>0.789</td><td>0.104</td><td>168</td><td>0.885</td><td>0.777</td></tr>
+<tr><td>positional (length, position, first token)</td><td>0.637</td><td>0.205</td><td>204</td><td>0.624</td><td>0.039</td><td>97</td><td>0.638</td><td>0.616</td></tr>
+<tr><td>lookup + positional</td><td>0.903</td><td>0.608</td><td>542</td><td>0.807</td><td>0.175</td><td>241</td><td>0.895</td><td>0.793</td></tr>
+<tr><td>best single rubric (overconfidence)</td><td>0.760</td><td>0.271</td><td>336</td><td>0.678</td><td>0.038</td><td>71</td><td>0.769</td><td>0.688</td></tr>
+<tr><td>rubrics main</td><td>0.834</td><td>0.411</td><td>406</td><td>0.743</td><td>0.064</td><td>130</td><td>0.825</td><td>0.734</td></tr>
+<tr><td>rubrics cross</td><td>0.850</td><td>0.484</td><td>469</td><td>0.764</td><td>0.075</td><td>146</td><td>0.840</td><td>0.753</td></tr>
+<tr><td>lookup + rubrics main</td><td>0.905</td><td>0.613</td><td>583</td><td>0.807</td><td>0.112</td><td>177</td><td>0.899</td><td>0.794</td></tr>
+<tr><td>lookup + rubrics cross</td><td>0.906</td><td>0.629</td><td>577</td><td>0.811</td><td>0.126</td><td>222</td><td>0.901</td><td>0.799</td></tr>
+<tr><td>lookup + positional + rubrics cross</td><td>0.914</td><td>0.653</td><td>607</td><td>0.824</td><td>0.163</td><td>242</td><td>0.909</td><td>0.811</td></tr>
+</tbody></table></div>
+<div class="tablewrap"><table class="">
+<caption>Paired document bootstrap on random_unseen</caption>
+<thead><tr><th>contrast</th><th>comparison</th><th>ΔAUROC [95% CI]</th><th>ΔAP [95% CI]</th><th>Δtokens found [95% CI]</th></tr></thead><tbody>
+<tr><td>middle</td><td>rubrics cross minus word lookup</td><td>-0.042 [-0.054, -0.032]</td><td>-0.062 [-0.095, -0.031]</td><td>-38 [-72, -12]</td></tr>
+<tr><td>middle</td><td>lookup + rubrics cross minus word lookup</td><td>+0.014 [+0.010, +0.019]</td><td>+0.083 [+0.064, +0.101]</td><td>+70 [+50, +90]</td></tr>
+<tr><td>middle</td><td>lookup + positional + rubrics cross minus lookup + positional</td><td>+0.011 [+0.007, +0.015]</td><td>+0.045 [+0.032, +0.058]</td><td>+65 [+41, +82]</td></tr>
+<tr><td>rest</td><td>rubrics cross minus word lookup</td><td>-0.025 [-0.038, -0.010]</td><td>-0.029 [-0.045, -0.015]</td><td>-22 [-49, +2]</td></tr>
+<tr><td>rest</td><td>lookup + rubrics cross minus word lookup</td><td>+0.022 [+0.016, +0.029]</td><td>+0.023 [+0.011, +0.037]</td><td>+54 [+32, +76]</td></tr>
+<tr><td>rest</td><td>lookup + positional + rubrics cross minus lookup + positional</td><td>+0.017 [+0.012, +0.022]</td><td>-0.012 [-0.024, -0.001]</td><td>+1 [-13, +18]</td></tr>
+</tbody></table></div>
+<h3>Per rubric: how much is the word, how much is the context?</h3>
+<div class="conclusion"><p>Replacing each rubric's score with the leave-one-out mean score of the same word, which uses no labels and no context, matches or beats the raw score for 7 of 9 rubrics on middle and 8 of 9 on rest. The context-dependent residual carries weak signal (AUROC 0.53 to 0.59 on middle, 0.49 to 0.56 on rest). Added individually to the lookup, wrong_content_onset and directive_onset contribute most; scope_absoluteness, safeguard_omission and vulnerability add nothing distinguishable from zero.</p></div>
+<figure><img src="figures/item1_rubric_screen.png" alt="Per rubric: alone, word mean, residual"><figcaption>Figure 2. Each rubric alone, its word mean, and the residual, all judged tokens in the contrast.</figcaption></figure>
+<figure><img src="figures/item1_increment.png" alt="Increment of each rubric over the lookup"><figcaption>Figure 3. ΔAUROC from adding one rubric to the word lookup, out of fold, on random_unseen, paired 95% CI.</figcaption></figure>
+<div class="tablewrap"><table class="">
+<caption>Per-rubric screening: top 2% vs middle | top 2% vs rest. 'alone', 'word mean' and 'residual' are on all judged tokens in the contrast.</caption>
+<thead><tr><th>rubric</th><th>alone</th><th>its word mean</th><th>residual</th><th>ΔAUROC over lookup (random_unseen)</th><th>alone</th><th>its word mean</th><th>residual</th><th>ΔAUROC over lookup (random_unseen)</th></tr></thead><tbody>
+<tr><td>directive_onset</td><td>0.704</td><td>0.720</td><td>0.549</td><td>+0.006 [+0.003, +0.009]</td><td>0.638</td><td>0.654</td><td>0.542</td><td>+0.006 [+0.002, +0.009]</td></tr>
+<tr><td>harm_potential</td><td>0.756</td><td>0.757</td><td>0.592</td><td>+0.003 [+0.001, +0.007]</td><td>0.678</td><td>0.699</td><td>0.546</td><td>+0.004 [+0.001, +0.008]</td></tr>
+<tr><td>overconfidence</td><td>0.769</td><td>0.755</td><td>0.562</td><td>+0.003 [+0.000, +0.005]</td><td>0.688</td><td>0.685</td><td>0.536</td><td>+0.003 [+0.000, +0.006]</td></tr>
+<tr><td>safeguard_omission</td><td>0.683</td><td>0.691</td><td>0.538</td><td>+0.001 [-0.001, +0.003]</td><td>0.618</td><td>0.642</td><td>0.516</td><td>+0.001 [-0.001, +0.002]</td></tr>
+<tr><td>scope_absoluteness</td><td>0.717</td><td>0.722</td><td>0.532</td><td>+0.001 [-0.001, +0.003]</td><td>0.658</td><td>0.667</td><td>0.522</td><td>+0.001 [-0.001, +0.003]</td></tr>
+<tr><td>subtlety</td><td>0.745</td><td>0.730</td><td>0.572</td><td>+0.004 [+0.001, +0.006]</td><td>0.669</td><td>0.685</td><td>0.523</td><td>+0.004 [+0.001, +0.007]</td></tr>
+<tr><td>vulnerability</td><td>0.661</td><td>0.680</td><td>0.528</td><td>-0.001 [-0.002, +0.001]</td><td>0.609</td><td>0.651</td><td>0.490</td><td>-0.001 [-0.001, +0.000]</td></tr>
+<tr><td>wrong_content_onset</td><td>0.733</td><td>0.742</td><td>0.594</td><td>+0.008 [+0.005, +0.011]</td><td>0.672</td><td>0.703</td><td>0.558</td><td>+0.011 [+0.007, +0.015]</td></tr>
+<tr><td>wrongness</td><td>0.734</td><td>0.742</td><td>0.571</td><td>+0.004 [+0.001, +0.006]</td><td>0.661</td><td>0.691</td><td>0.528</td><td>+0.005 [+0.002, +0.008]</td></tr>
+</tbody></table></div>
+<p class="verdict">Red-team 1 verdict: claims stand; the lookup result is robust to the smoothing constant from 1 to 200; the only corrections were the "8 of 9" wording and the residual definition, both fixed before this report. <a href="#rt1">Report.</a></p>
+
+<h2 id="q2">2. Which model should the interpretive sections use?</h2>
+<div class="conclusion"><p>Adding each rubric's square and its judge spread to the main model (28 parameters) matches the cross model (46) on pooled AUROC and beats it on AP. The reference model with all three term types (64) beats both on every pooled metric. On held-out documents the picture shifts: the cross terms' AUROC gain generalizes and the curvature-plus-spread gain partly does not, so cross beats main + spread + z² there by about +0.006 to +0.010, while the reference stays level with cross on AUROC and ahead on AP. The reference model is never worse than either alternative, so it is the model to interpret. What the cross coefficients mean is the subject of item 3.</p></div>
+<figure><img src="figures/item2_nested_deltas.png" alt="Paired deltas between nested models"><figcaption>Figure 4. Paired document-bootstrap deltas between nested models, on all judged tokens (black) and on random_unseen (blue).</figcaption></figure>
+<div class="tablewrap"><table class="">
+<caption>Nested models, out of fold: top 2% vs middle | top 2% vs rest (ru = random_unseen)</caption>
+<thead><tr><th>model</th><th>params</th><th>AUROC all</th><th>AP all</th><th>AUROC ru</th><th>AP ru</th><th>AUROC all</th><th>AP all</th><th>AUROC ru</th><th>AP ru</th></tr></thead><tbody>
+<tr><td>main</td><td>10</td><td>0.825</td><td>0.513</td><td>0.834</td><td>0.411</td><td>0.734</td><td>0.106</td><td>0.743</td><td>0.064</td></tr>
+<tr><td>main + z²</td><td>19</td><td>0.835</td><td>0.569</td><td>0.838</td><td>0.486</td><td>0.748</td><td>0.126</td><td>0.755</td><td>0.079</td></tr>
+<tr><td>main + spread</td><td>19</td><td>0.835</td><td>0.560</td><td>0.835</td><td>0.462</td><td>0.744</td><td>0.122</td><td>0.746</td><td>0.076</td></tr>
+<tr><td>main + spread + z²</td><td>28</td><td>0.844</td><td>0.591</td><td>0.844</td><td>0.503</td><td>0.752</td><td>0.132</td><td>0.754</td><td>0.085</td></tr>
+<tr><td>cross</td><td>46</td><td>0.840</td><td>0.568</td><td>0.850</td><td>0.484</td><td>0.753</td><td>0.125</td><td>0.764</td><td>0.075</td></tr>
+<tr><td>cross + z²</td><td>55</td><td>0.843</td><td>0.587</td><td>0.849</td><td>0.502</td><td>0.756</td><td>0.136</td><td>0.765</td><td>0.084</td></tr>
+<tr><td>cross + spread</td><td>55</td><td>0.848</td><td>0.597</td><td>0.850</td><td>0.507</td><td>0.758</td><td>0.144</td><td>0.762</td><td>0.092</td></tr>
+<tr><td>cross + spread + z² (reference)</td><td>64</td><td>0.850</td><td>0.605</td><td>0.853</td><td>0.514</td><td>0.760</td><td>0.147</td><td>0.764</td><td>0.095</td></tr>
+</tbody></table></div>
+<div class="tablewrap"><table class="">
+<caption>Paired document-bootstrap deltas, 95% CI</caption>
+<thead><tr><th>contrast</th><th>comparison</th><th>ΔAUROC all</th><th>ΔAP all</th><th>ΔAUROC random_unseen</th><th>ΔAP random_unseen</th></tr></thead><tbody>
+<tr><td>middle</td><td>cross minus main</td><td>+0.015 [+0.012, +0.019]</td><td>+0.055 [+0.047, +0.064]</td><td>+0.016 [+0.011, +0.021]</td><td>+0.073 [+0.057, +0.093]</td></tr>
+<tr><td>middle</td><td>main + spread + z² minus main</td><td>+0.019 [+0.015, +0.023]</td><td>+0.078 [+0.070, +0.086]</td><td>+0.010 [+0.004, +0.018]</td><td>+0.092 [+0.078, +0.107]</td></tr>
+<tr><td>middle</td><td>cross minus main + spread + z²</td><td>-0.003 [-0.008, +0.001]</td><td>-0.022 [-0.031, -0.015]</td><td>+0.006 [+0.000, +0.012]</td><td>-0.019 [-0.033, -0.004]</td></tr>
+<tr><td>middle</td><td>cross + spread + z² minus main + spread + z²</td><td>+0.007 [+0.005, +0.009]</td><td>+0.015 [+0.011, +0.020]</td><td>+0.009 [+0.005, +0.012]</td><td>+0.011 [+0.003, +0.020]</td></tr>
+<tr><td>middle</td><td>cross + spread + z² minus cross</td><td>+0.010 [+0.007, +0.013]</td><td>+0.037 [+0.029, +0.045]</td><td>+0.003 [-0.002, +0.008]</td><td>+0.030 [+0.019, +0.040]</td></tr>
+<tr><td>rest</td><td>cross minus main</td><td>+0.020 [+0.016, +0.024]</td><td>+0.020 [+0.015, +0.026]</td><td>+0.021 [+0.015, +0.027]</td><td>+0.011 [+0.004, +0.019]</td></tr>
+<tr><td>rest</td><td>main + spread + z² minus main</td><td>+0.018 [+0.013, +0.023]</td><td>+0.027 [+0.023, +0.031]</td><td>+0.011 [+0.003, +0.019]</td><td>+0.021 [+0.015, +0.027]</td></tr>
+<tr><td>rest</td><td>cross minus main + spread + z²</td><td>+0.002 [-0.003, +0.008]</td><td>-0.007 [-0.013, -0.001]</td><td>+0.010 [+0.004, +0.017]</td><td>-0.010 [-0.018, -0.003]</td></tr>
+<tr><td>rest</td><td>cross + spread + z² minus main + spread + z²</td><td>+0.008 [+0.006, +0.010]</td><td>+0.014 [+0.010, +0.020]</td><td>+0.010 [+0.006, +0.015]</td><td>+0.010 [+0.002, +0.018]</td></tr>
+<tr><td>rest</td><td>cross + spread + z² minus cross</td><td>+0.006 [+0.003, +0.010]</td><td>+0.021 [+0.017, +0.026]</td><td>-0.000 [-0.006, +0.005]</td><td>+0.021 [+0.013, +0.027]</td></tr>
+</tbody></table></div>
+<details><summary>Absolute AUROC per model with CIs</summary><figure><img src="figures/item2_nested_abs.png" alt="Absolute AUROC per nested model"><figcaption>Figure 5. Absolute out-of-fold AUROC. The absolute CIs overlap; the paired deltas above are the test.</figcaption></figure></details>
+<p class="verdict">Red-team 2 verdict: no computational bugs; the fit converges in 7 to 8 Newton steps with a benign Hessian; an independent L-BFGS refit reproduces the AUROCs to 3e-5. It flagged that the original figure showed only pooled rows while the held-out scope reverses the cross-vs-curvature ordering, which is now shown and stated above. It also showed the overlap is symmetric: squares are as predictable from products as products from squares, so "the products are proxies" is no more true than the reverse. <a href="#rt2">Report.</a></p>
+
+<h2 id="q3">3. Under the reference model, which rubrics and interactions matter?</h2>
+<div class="conclusion"><p>Dropping a rubric with all its terms gives three tiers under both models. directive_onset costs about 0.03 AUROC on its own. scope_absoluteness, wrong_content_onset, subtlety, overconfidence and vulnerability each cost 0.002 to 0.01 and their order changes between models. safeguard_omission costs nothing; harm_potential and wrongness cost 0.001 to 0.003, distinguishable from zero on middle but not materially so. Interaction groups shrink sharply once curvature and spread are in the model: on middle, overconfidence's products go from -0.0047 to -0.0006 pseudo-R², scope_absoluteness's from -0.0108 to -0.0031, subtlety's from -0.0086 to -0.0022, and directive_onset's halve. Of the 36 products, 30 keep their sign with a median weight ratio of 0.71; the number whose drop-one CI excludes zero is 5 under cross and 7 under the reference on middle, 8 and 6 on rest. directive_onset × subtlety is the only product that is significant under both models on both contrasts.</p></div>
+<figure><img src="figures/item3_drop_rubric.png" alt="Drop one rubric under both models"><figcaption>Figure 6. ΔAUROC, ΔAP and Δpseudo-R² when one rubric and all its terms are dropped, under the notebook's cross model (orange squares) and the reference model (green circles). Paired 95% CIs.</figcaption></figure>
+<div class="tablewrap"><table class="">
+<caption>ΔAUROC when the rubric (all its terms) is dropped; negative = the rubric helps. Paired 95% CI.</caption>
+<thead><tr><th>dropped rubric</th><th>cross, middle</th><th>reference, middle</th><th>cross, rest</th><th>reference, rest</th></tr></thead><tbody>
+<tr><td>directive_onset</td><td>-0.035 [-0.040, -0.030]</td><td>-0.029 [-0.033, -0.025]</td><td>-0.032 [-0.038, -0.026]</td><td>-0.025 [-0.030, -0.021]</td></tr>
+<tr><td>scope_absoluteness</td><td>-0.005 [-0.007, -0.003]</td><td>-0.005 [-0.007, -0.003]</td><td>-0.007 [-0.010, -0.005]</td><td>-0.010 [-0.012, -0.007]</td></tr>
+<tr><td>wrong_content_onset</td><td>-0.005 [-0.006, -0.003]</td><td>-0.005 [-0.007, -0.003]</td><td>-0.007 [-0.010, -0.004]</td><td>-0.007 [-0.009, -0.004]</td></tr>
+<tr><td>subtlety</td><td>-0.006 [-0.008, -0.004]</td><td>-0.005 [-0.007, -0.003]</td><td>-0.005 [-0.007, -0.003]</td><td>-0.003 [-0.005, -0.001]</td></tr>
+<tr><td>overconfidence</td><td>-0.006 [-0.008, -0.004]</td><td>-0.003 [-0.005, -0.002]</td><td>-0.005 [-0.006, -0.003]</td><td>-0.002 [-0.004, -0.001]</td></tr>
+<tr><td>vulnerability</td><td>-0.004 [-0.005, -0.002]</td><td>-0.003 [-0.005, -0.001]</td><td>-0.004 [-0.006, -0.001]</td><td>-0.004 [-0.006, -0.002]</td></tr>
+<tr><td>wrongness</td><td>-0.001 [-0.002, -0.000]</td><td>-0.002 [-0.004, -0.001]</td><td>-0.001 [-0.002, +0.000]</td><td>-0.001 [-0.002, +0.000]</td></tr>
+<tr><td>harm_potential</td><td>-0.003 [-0.004, -0.001]</td><td>-0.001 [-0.002, -0.000]</td><td>-0.002 [-0.003, -0.000]</td><td>-0.001 [-0.002, +0.000]</td></tr>
+<tr><td>safeguard_omission</td><td>-0.000 [-0.001, +0.001]</td><td>+0.000 [-0.000, +0.001]</td><td>-0.000 [-0.001, +0.001]</td><td>-0.000 [-0.001, +0.000]</td></tr>
+</tbody></table></div>
+<div class="tablewrap"><table class="">
+<caption>Δpseudo-R² when all products involving the rubric are dropped (its linear, square and spread terms kept)</caption>
+<thead><tr><th>rubric&#x27;s 8 products dropped</th><th>cross, middle</th><th>reference, middle</th><th>cross, rest</th><th>reference, rest</th></tr></thead><tbody>
+<tr><td>directive_onset</td><td>-0.0191</td><td>-0.0098</td><td>-0.0134</td><td>-0.0098</td></tr>
+<tr><td>scope_absoluteness</td><td>-0.0108</td><td>-0.0031</td><td>-0.0049</td><td>-0.0020</td></tr>
+<tr><td>subtlety</td><td>-0.0086</td><td>-0.0022</td><td>-0.0053</td><td>-0.0013</td></tr>
+<tr><td>harm_potential</td><td>-0.0012</td><td>-0.0010</td><td>-0.0001</td><td>+0.0003</td></tr>
+<tr><td>overconfidence</td><td>-0.0047</td><td>-0.0006</td><td>-0.0024</td><td>-0.0002</td></tr>
+<tr><td>wrongness</td><td>-0.0033</td><td>-0.0003</td><td>-0.0013</td><td>+0.0000</td></tr>
+<tr><td>wrong_content_onset</td><td>-0.0018</td><td>-0.0001</td><td>-0.0018</td><td>+0.0001</td></tr>
+<tr><td>vulnerability</td><td>-0.0003</td><td>-0.0000</td><td>+0.0000</td><td>-0.0003</td></tr>
+<tr><td>safeguard_omission</td><td>-0.0012</td><td>+0.0000</td><td>-0.0005</td><td>-0.0001</td></tr>
+</tbody></table></div>
+<figure><img src="figures/item3_heatmap_middle.png" alt="Cross-term coefficients, cross vs reference, middle contrast"><figcaption>Figure 7. Contribution spread (beta × SD of the term) of every product (lower triangle) and linear term (diagonal), middle contrast, under both models. Star: same sign in all five fold fits. Note the diagonal changes meaning under the reference model: it is the slope at the mean with the square and spread terms present, which is why wrongness goes from +0.03 to +0.46.</figcaption></figure>
+<figure><img src="figures/item3_pairs_scatter.png" alt="Each product's weight under cross vs reference"><figcaption>Figure 8. Each product's weight before and after adding curvature and judge spread. Dashed: unchanged. Dotted: halved. Red: sign flips.</figcaption></figure>
+<div class="tablewrap"><table class="">
+<caption>The 8 largest products under the notebook's cross model on the middle contrast, and what they become once curvature and spread are in the model</caption>
+<thead><tr><th>product</th><th>weight, cross</th><th>weight, reference</th><th>ratio</th><th>drop-one CI excludes 0, cross</th><th>same, reference</th><th>weight, cross (rest)</th><th>weight, reference (rest)</th><th>ratio (rest)</th></tr></thead><tbody>
+<tr><td>directive_onset x subtlety</td><td>-0.55</td><td>-0.38</td><td>0.69</td><td>yes</td><td>yes</td><td>-0.43</td><td>-0.29</td><td>0.69</td></tr>
+<tr><td>overconfidence x scope_absoluteness</td><td>+0.48</td><td>+0.29</td><td>0.61</td><td>yes</td><td>no</td><td>+0.27</td><td>+0.09</td><td>0.35</td></tr>
+<tr><td>scope_absoluteness x subtlety</td><td>+0.34</td><td>+0.23</td><td>0.68</td><td>no</td><td>no</td><td>+0.26</td><td>+0.15</td><td>0.58</td></tr>
+<tr><td>overconfidence x subtlety</td><td>-0.32</td><td>-0.26</td><td>0.81</td><td>no</td><td>no</td><td>-0.15</td><td>-0.10</td><td>0.70</td></tr>
+<tr><td>harm_potential x overconfidence</td><td>-0.27</td><td>-0.27</td><td>0.99</td><td>no</td><td>no</td><td>-0.23</td><td>-0.22</td><td>0.93</td></tr>
+<tr><td>subtlety x wrong_content_onset</td><td>+0.26</td><td>+0.12</td><td>0.45</td><td>yes</td><td>no</td><td>+0.17</td><td>+0.05</td><td>0.32</td></tr>
+<tr><td>scope_absoluteness x wrong_content_onset</td><td>-0.23</td><td>-0.20</td><td>0.89</td><td>no</td><td>no</td><td>-0.13</td><td>-0.09</td><td>0.70</td></tr>
+<tr><td>harm_potential x scope_absoluteness</td><td>+0.21</td><td>+0.16</td><td>0.77</td><td>no</td><td>no</td><td>+0.13</td><td>+0.14</td><td>1.03</td></tr>
+</tbody></table></div>
+<details><summary>Heatmap for the rest contrast</summary><figure><img src="figures/item3_heatmap_rest.png" alt="Cross-term coefficients, rest contrast"></figure></details>
+<p class="verdict">Red-team 3 verdict: no computational bugs; its own refit reproduced the directive_onset drop-one delta (-0.0290) and the directive_onset × subtlety weights (-0.551 / -0.378) exactly, and the cross-model drop-one values match the notebook's saved cell 23 to three decimals. It corrected my wording: the middle tier reorders between models, and wrongness and harm_potential are small rather than null. Both are reflected above. <a href="#rt3">Report.</a></p>
+
+<h2 id="next">What to do next: decisions that are yours</h2>
+<ul>
+<li><strong>Item 4, direction.</strong> Fit bottom-X% vs middle and top vs bottom with the reference model. Choices: X for the bottom band (2% to mirror the top, or wider since the bottom tail is less lexical); whether the signed predictor regresses on the percentile or on the signed raw score; and whether to keep the two-sided classification as a check. The mass-captured analysis showed the current top-2% classifier selects protective tokens, which only a signed target can learn.</li>
+<li><strong>Replace <code>score</code> with the digit distribution in the notebook's fits.</strong> The reference model needs the spread column from p0..p9, which the CSVs already carry. The cheapest version is the 9 scores + 9 spreads + 9 squares used here; the fuller version is all 81 digit probabilities, which performed the same in the earlier check.</li>
+<li><strong>Report the lookup and positional rows in the cell 19 table</strong> and quote the residual AUROC or the increment over the lookup as a rubric's screening number.</li>
+<li><strong>Not done here, on purpose.</strong> AME plots under the reference model (secondary, no new information expected); the word-mean versus raw analysis stratified by frequency (item 5 of the plan); the IF-mass-captured metric on held-out documents (item 6); the hand-labelled sample.</li>
+</ul>
+
+<h2 id="appendix">Appendix</h2>
+<h3>A1. Reproduction check</h3>
+<p class="small">Before any new number, the notebook's own saved outputs were recomputed from scratch with the shared module, same seed, same document folds, same standardization.</p>
+<div class="tablewrap"><table class="">
+<caption>Reproduction check (item0_reproduce.py)</caption>
+<thead><tr><th>quantity</th><th>notebook&#x27;s saved output</th><th>recomputed with common.py</th><th>match</th></tr></thead><tbody>
+<tr><td>group table (docs / tokens / top-2%)</td><td>400/26766/1665, 100/6534/411, 89/6434/248, 1000/65356/1005</td><td>identical</td><td>yes</td></tr>
+<tr><td>middle: main AUROC / AP / R-prec</td><td>0.825 / 0.513 / 0.487</td><td>0.8253 / 0.5128 / 0.4869</td><td>yes</td></tr>
+<tr><td>middle: cross AUROC / AP / R-prec</td><td>0.840 / 0.568 / 0.525</td><td>0.8404 / 0.5682 / 0.5251</td><td>yes</td></tr>
+<tr><td>rest: main AUROC / AP / R-prec</td><td>0.734 / 0.106 / 0.167</td><td>0.7337 / 0.1056 / 0.1670</td><td>yes</td></tr>
+<tr><td>rest: cross AUROC / AP / R-prec</td><td>0.753 / 0.125 / 0.199</td><td>0.7534 / 0.1253 / 0.1995</td><td>yes</td></tr>
+<tr><td>middle: AUROC CI main / cross (cell 21)</td><td>[0.818, 0.833] / [0.833, 0.848]</td><td>[0.818, 0.833] / [0.833, 0.848]</td><td>yes</td></tr>
+<tr><td>middle: drop directive_onset, cross: ΔAUROC / ΔAP (cell 23)</td><td>-0.035 [-0.040, -0.030] / -0.069 [-0.080, -0.060]</td><td>-0.035 [-0.040, -0.030] / -0.069 [-0.080, -0.060]</td><td>yes</td></tr>
+</tbody></table></div>
+<h3>A2. Method notes</h3>
+<ul class="small">
+<li>Data: <code>scped_IFS/token_scores_olmo_career.npz</code> joined to the nine <code>scped_IFS/rubric_eval/*/attributions.csv</code>, exactly as the notebook's cells 2 to 4. Judge spread per token is the SD of the renormalized digit distribution p0..p9. Word key: stripped, lowercased token text.</li>
+<li>Folds: five, by document, seed 0, as the notebook. Standardization fitted on training folds; products and squares not re-standardized (the notebook's convention; red-team 2 showed re-standardizing changes nothing at four decimals).</li>
+<li>Lookup: smoothed rate (sum + 5·prior)/(count + 5) per word from training-fold tokens, prior = training base rate, unseen words get the prior. Fed to the logistic as its logit. Stacking caveat (red-team 0): training rows' lookup values were estimated on folds that include the test fold's labels; a fully nested lookup moves AUROC by about 0.0005 in the conservative direction.</li>
+<li>CIs: 200 document resamples; paired deltas evaluate both models on the same resample. Error bars are never clipped.</li>
+<li>Fold-sign stars on the coefficient heatmaps come from fits on the full-data standardization and overlap 4/5 with the full fit; they are a weak stability check, interpretation only.</li>
+</ul>
+<h3>A3. Files</h3>
+<ul class="small">
+<li><code>common.py</code>, <code>plotting.py</code>: shared code. <code>item0_reproduce.py</code>, <code>item1_baselines.py</code>, <code>item2_reference_model.py</code>, <code>item3_interpret.py</code>, <code>build_report.py</code>.</li>
+<li>CSVs: <code>item1_models.csv</code>, <code>item1_deltas.csv</code>, <code>item1_rubric_screen.csv</code>, <code>item2_models.csv</code>, <code>item2_deltas.csv</code>, <code>item3_drop_rubric.csv</code>, <code>item3_drop_pair.csv</code>, <code>item3_coefficients.csv</code>, <code>item3_pairs_cross_vs_reference.csv</code>, <code>item0_reproduce.json</code>.</li>
+<li>Figures in <code>figures/</code>. Red-team reports in <code>redteam_reports/</code>. Run logs <code>item*_run.log</code>.</li>
+<li>Nothing was installed; the notebook was not modified; only the EMinf venv interpreter was used; no network access.</li>
+</ul>
+<h3 id="rt0">A4. Red-team 0: shared code and reproduction</h3><pre class='rt'># Red-team 0: common.py and the reproduction check (subagent report, verbatim)
+
+BUGS FOUND (none high; two low-severity caveats, no effect on reported numbers)
+
+1. common.py:184-195 (`oof_predict`, `extra` with `rows`), low. `extra` is indexed as `np.asarray(extra)[rows]`, so it must have full length len(fd[&quot;sub&quot;]) even when `rows` is a subset; the docstring says &quot;(n_rows, k)&quot;, which is ambiguous. Passing a len(rows)-length array raises IndexError in practice (verified), so it fails loudly rather than misaligning, unless rows happen to be the leading indices. Fix the docstring. Scores/labels/folds themselves are correctly co-indexed by `rows` (verified: rows-subset prediction equals a manual masked fit exactly).
+
+2. common.py:215-227 + item1 usage (`oof_lookup` fed as `extra`), low. Classic stacking caveat: for outer fold k, training rows&#x27; lookup feature was estimated on folds != own, which includes fold k&#x27;s labels, so the coefficient on the lookup is fit on features that saw test labels. I re-ran with a properly nested lookup (inner OOF among the 4 training folds): &quot;lookup only&quot; AUROC 0.8847 vs nested 0.8849; &quot;lookup + rubrics main&quot; 0.8994 vs 0.8999 (random_unseen 0.9051 vs 0.9055). Effect is ~0.0005 and in the conservative direction; worth a one-line note, not a fix.
+
+Everything else checked clean: `oof_lookup` matches a brute-force rate on 200 test rows (train-only stats, train prior for unseen words); `loo_word_mean` matches brute force on 300 rows and uses no labels; standardization is fitted on train folds only and `np.where` version is numerically identical to the notebook&#x27;s in-place version (incl. sd==0 column); `build_design` column order matches `term_names` for all term sets and for explicit `pairs` (counts and spot-checked columns); spread uses p0..p9 renormalised (row sums are 0.98-1.0; all `sd_` finite) with sqrt(E[x^2]-E[x]^2); `paired_boot` uses one resample per iteration for all models (paired), quantiles per column; `abs_boot` fine. `keep_default_na=False` differs from the notebook (2 tokens &quot;NA&quot; are NaN there) but the join count is identical (105090). Minor: 306 whitespace-only tokens collapse to word &quot;&quot; in the lookup.
+
+NUMBERS (independent code, no common import except (iii)):
+(i) top2 vs middle: n = 23939, base rate 0.1391 (3329 positives). Confirmed.
+(ii) AUROC overconfidence = 0.7695. Confirmed (0.769).
+(iii) harm_potential row 0 (ex 11, pos 136, &quot;.&quot;): hand SD = 0.316227, common sd_harm_potential = 0.316227. Match. Also `score` == EV of normalised P to 1e-15.
+Folds: both contrasts 1589 docs, each in exactly one fold; docs/fold 318/318/318/318/317; tokens/fold (middle) 5070/4796/4579/4783/4711; positives/fold 684/637/660/645/703; no doc in both train and test of any fold; doc_rows cover every row once, each single-doc.
+
+VERDICT: common.py faithfully reproduces the notebook (data, folds, fits, bootstraps) and is safe to build on; only clarify the `extra` length convention and optionally footnote the negligible stacking caveat.
+
+Action taken: docstring fixed and the stacking caveat recorded in common.oof_predict&#x27;s docstring.
+</pre>
+<h3 id="rt1">A5. Red-team 1: baselines</h3><pre class='rt'># Red-team 1: item1_baselines.py (subagent report, verbatim)
+
+BUGS FOUND
+
+1. item1_baselines.py:138 (fig-2 title) and claim (C) wording — &quot;word mean matches or beats the rubric&quot; / &quot;8 of 9&quot;. Actual: middle 7/9 (overconfidence 0.7545 &lt; 0.7695, subtlety 0.7302 &lt; 0.7454), rest 8/9 (overconfidence). Residual range &quot;0.51–0.59&quot; is middle only; rest spans 0.4875–0.555 (vulnerability below chance). No CI is computed for word-mean vs raw (harm_potential middle differs by 0.0009). Severity: medium (overstatement), code itself fine.
+2. item1_baselines.py:86 — residual uses the plain word mean, so residual = (1−1/n)(s − LOO mean): exactly 0 for singleton words (4.4% middle / 1.7% rest of rows) and shrunk by word count. Switching to LOO moves residual AUROC by up to ±0.03 (directive_onset 0.573→0.549, subtlety 0.540→0.572) but the range stays 0.53–0.59 (middle). Severity: low.
+3. item1_baselines.py:39 — best single rubric chosen on all rows incl. random_unseen. Choosing on non-ru rows picks the same (overconfidence); effect zero. Severity: low/minor optimism.
+4. Note (not a bug): for the middle contrast the LOO word mean is taken over label-selected tokens (top ∪ middle). Using the full-corpus word mean gives higher AUROC (8/9 on middle), so the claim is not inflated by this.
+
+CHECKS
+
+- Lookup leakage: flipping every test-fold label leaves test-fold lookup values unchanged (max diff 0.0, all 5 folds); no document spans folds; my own lookup implementation on the script&#x27;s folds matches C.oof_lookup exactly. Fully nested (non-stacked) lookup+cross gives 0.9070/0.8121 vs script 0.9064/0.8115 — stacking caveat is conservative.
+- subset_doc_rows: 1000 groups, index 0..n−1 covered exactly, each group one document. paired_boot references consistent; raw-logit lookup vs per-fold-refit &quot;lookup only&quot; AUROC differ ≤0.0003.
+- random_unseen definition identical to notebook cell 4.
+- Alpha sensitivity, lookup AUROC ru (middle / rest): α=0 0.868/0.749; α=1 0.890/0.772; α=5 0.892/0.789; α=50 0.880/0.797; α=200 0.872/0.792. Rubrics cross = 0.850/0.764. Δ(lookup+cross − lookup): middle +0.018/+0.014/+0.012, rest +0.031/+0.022/+0.017 for α=1/5/50. Ranking of (A),(B) unchanged for α∈[1,200]; only the unsmoothed α=0 lookup loses to the rubrics on rest.
+- Independent recomputation (own code, own folds; seeds 1–4, 5/10/20-fold): middle ru lookup AUROC 0.8940–0.8975 vs 0.8920 — within 0.01.
+- Artifact probe: top-2% is strongly lexical. In-sample lookup AUROC 0.947 (middle)/0.884 (rest); 3329 positives span 996 words, top 200 words hold 69%; &quot;just/without/only/immediately/solely/automatically/tell/ignore&quot; are 93–100% positive in the middle contrast; 60% of middle positives have a word with in-sample rate &gt;0.5. No path for score/pctile into the lookup (key = token_text only). Finding, not bug: the IF signal is largely absolutist/directive vocabulary, which is why a unigram beats the judge.
+- Figures: item1_models.png and item1_increment.png match CSVs; error bars present, unclipped (xlims contain all CIs). item1_rubric_screen.png: title overstated (bug 1), no CIs; values match CSV.
+- (D): 0.637 / 0.624 matches &quot;~0.64/~0.62&quot;.
+
+VERDICT
+(A) stands — robust to α≥1; add the caveat that the lookup wins because top-2% is lexically concentrated.
+(B) stands.
+(C) stands with caveat — 7/9 (middle), 8/9 (rest); residual range is contrast-specific; residual should use LOO mean; no CIs.
+(D) stands.
+
+Action taken: residual switched to the LOO word mean; figure title now states the actual count per contrast; item 1 rerun.
+</pre>
+<h3 id="rt2">A6. Red-team 2: reference model</h3><pre class='rt'># Red-team 2: item2_reference_model.py (subagent report, verbatim)
+
+BUGS FOUND
+
+1. item2_reference_model.py:75 (and suptitle line 89): the delta figure plots only scope==&quot;all&quot; and the headline is stated for &quot;all rows&quot;. On the random_unseen subset (the only docs not used in rubric development; 14,213/23,939 middle rows but only 1,005/3,329 positives) the AUROC ordering reverses: cross − (main+spread+z²) = +0.0057 [+0.0004, +0.0120] middle, +0.0099 [+0.0037, +0.0170] rest; reference − cross = +0.003 [−0.002, +0.008] middle, −0.0002 [−0.006, +0.005] rest. On unseen docs, interactions beat curvature+spread and the latter add nothing on top of cross (AUROC; AP still favours spread+z²). Severity: medium (reporting, not computation); &quot;all&quot; is weighted toward seen docs holding 70% of positives.
+2. item2_reference_model.py:106: legend(loc=&quot;lower right&quot;) in item2_nested_abs.png sits on the reference-model row&#x27;s markers/bars in the left panel. Severity: low, cosmetic.
+
+No computational bugs found.
+
+CHECKS
+- z², spread, products are built from training-fold-standardized Z/SD (common.py:204-209); test rows use train mu/sigma. Products/squares not re-standardized; re-standardizing every column on train stats gives identical OOF AUROC/AP to 4 dp for all three models (ridge 1e-4 vs n≈19k per train fold is negligible).
+- Convergence (instrumented copy, middle contrast, every fold): reference 7-8 Newton iterations, final step ≤ 4e-8, max|grad| &lt; 1e-12, step norms monotone, max|eta| ≈ 7 (clip never active), max|beta| ≈ 1.9; my beta equals common.fit_logit exactly. cond(H) at convergence: reference 5.3e3-6.7e3, cross ~3e3, main+spread+z² ~1.2e3 — benign. corr(z², spread) per rubric −0.67 (subtlety) to +0.27; no collinearity problem.
+- Independent L-BFGS ridge-logistic re-derivation on common.fit_data folds: main+spread+z² 0.8439, cross 0.8404, reference 0.8505 (max |pred diff| ≤ 3e-5 vs pipeline; AP 0.5905/0.5682/0.6052). Values confirmed.
+- paired_boot (common.py:263-266) evaluates ref and model on the same resample r; .loc[a] with ref=b gives a − b, matching the model/minus columns. Orientation correct. abs_boot uses the same seed.
+- PNGs match CSVs (e.g. −0.0034 [−0.0079, +0.0006]); labels legible; bars unclipped.
+- Extra comparison (full-data middle, cross vs reference): top-5 cross coefs in cross model: directive_onset×subtlety −0.512, scope_abs×subtlety +0.343, overconf×subtlety −0.323, overconf×scope_abs +0.297, subtlety×wrong_content −0.270; in reference: −0.351, +0.232, −0.263, +0.180, +0.122 (ratios 0.45-0.81); sum beta² over cross terms 1.00 → 0.63; coef correlation 0.86; harm_potential×wrongness grows from −0.045 to +0.249 (unmasked). Linear R² of each product on [1,z,z²,spread]: median 0.72 (0.26-0.91), but z² columns are equally predictable from products (R² 0.70-0.93): the overlap is symmetric. The headline interaction directive_onset×subtlety is the least explained by curvature (R² 0.26) and shrinks least among big terms.
+
+VERDICT
+(A) Stands with caveat: true on all rows; on random_unseen docs cross beats main+spread+z² on AUROC (CI excludes 0). AP claim stands on both scopes.
+(B) Stands (all rows +0.0066 [+0.0046, +0.0091], +0.0081 [+0.0058, +0.0105]; ≈0.42-0.44 of cross-over-main). On random_unseen the unique interaction signal is larger (+0.009/+0.010) and spread+z² add ~0 on top of cross.
+(C) Stands with caveat: cross coefficients shrink ~30-40% when z²/spread are added, but the overlap is symmetric (curvature is equally &quot;proxied&quot; by products), the flagship directive_onset×subtlety term is mostly not a proxy, and on unseen docs interactions carry the signal. &quot;Partly proxies&quot; is defensible; &quot;28 params match 46&quot; alone is not sufficient evidence.
+
+Action taken: the delta figure now shows both scopes (all rows and random_unseen) and its title was rewritten; the legend was moved off the data; the report&#x27;s conclusion for item 2 carries the caveat.
+</pre>
+<h3 id="rt3">A7. Red-team 3: interpretation</h3><pre class='rt'># Red-team 3: item3_interpret.py (subagent report, verbatim)
+
+BUGS FOUND
+
+1. item3_interpret.py:143 (cosmetic, low): heatmap colour limit `lim` is taken over product columns only (slice is correct for both models: index 10 for cross, 28 for reference; verified). The diagonal linear terms are not included, so cells exceeding lim saturate (middle cross overconfidence +0.60, reference subtlety +0.59 vs lim 0.55). Numbers are printed, so only the colour is clipped.
+2. item3_interpret.py:136 and suptitle text (claim wording, low): &quot;the ranking of rubrics is the same under both models&quot; is overstated; see (A) below.
+3. item3_interpret.py:162 (cosmetic): suptitle says &quot;* = same sign in all 5 fold fits&quot; but stars are only drawn on products; diagonals have no star although the CSV carries the flag (e.g. rest reference scope_absoluteness linear is fold-unstable, not visible in the figure). Also the right panel&#x27;s y-tick labels (&quot;wrong_content_onset&quot;) abut the left panel&#x27;s right edge.
+
+No computational bugs.
+
+CHECKS
+- (i) Dropping a rubric: oof_predict derives sd_ columns from the 8 score columns, pairs=None gives all C(8,2)=28 products; design width 1+24+28=53 (verified). (ii) `pairs=[p for p in PAIRS if p != (i,j)]` gives 35 products (verified); permuting columns changes the Newton fit by 1e-15. (iii) `M[j,i]` with i&lt;j is the lower triangle; `ax.text(i, j)` places at column i, row j, i.e. the same cell; term_names order (linear, ^2, sd(), x) matches build_design (asserted identical designs). (v) fold_betas use rows of the full-data-standardized X; interpretation-only, not out-of-fold, and 4/5 overlap with the full fit makes &quot;stable&quot; a weak check.
+- Recompute (own OOF loop, own doc-bootstrap, seed 123): drop directive_onset, reference, middle: dAUROC = -0.0290, CI [-0.0325, -0.0252]. Script: -0.0290.
+- Contribution spread directive_onset x subtlety, middle, own design matrix: cross -0.5507 (beta -0.512), reference -0.3777 (beta -0.351). Script: -0.551 / -0.378.
+- Row counts: drop_pair 180 (36 pair + 9 group per contrast x model), coefficients 216 (45 + 63 per contrast), drop_rubric 36, pairs table 72.
+- Notebook match (cell 23, cross model, middle): directive_onset -0.0346/-0.0687 vs -0.035/-0.069; scope_absoluteness -0.0052/-0.0206 vs -0.005/-0.021; overconfidence, subtlety, wrong_content_onset, vulnerability, harm_potential, safeguard_omission all match to 3 dp.
+- PNG spot checks vs item3_coefficients.csv (middle): cross diagonal directive_onset +0.56 (0.562), directive_onset x subtlety -0.55* (-0.551, stable), overconfidence x scope_absoluteness +0.48* (0.483); reference +0.29 (0.291), -0.38* (-0.378), +0.29* (0.294); subtlety x wrongness -0.08 without star (CSV False). Rest: safeguard_omission x scope_absoluteness +0.15* / -0.02 no star match. Error bars unclipped (errbars uses non-negative lengths, all within axes). Labels legible.
+
+VERDICT
+(A) Stands with caveat. directive_onset dominates (-0.035 cross, -0.029 ref on middle). But the middle tier reorders between models (middle dAUROC: cross subtlety &gt; overconfidence &gt; scope &gt; wrong_content; reference scope &gt; wrong_content &gt; subtlety &gt; overconfidence), and wrongness is not &quot;nothing unique&quot;: its dAUROC CI excludes 0 on middle under both models (-0.0013 [-0.0023,-0.0005]; -0.0025 [-0.0041,-0.0012]) and dAP too, as does harm_potential on middle. Only safeguard_omission is consistently null. Three-tier picture holds; exact ranking does not.
+(B) Stands with caveat. Middle pseudo-R2 ratios ref/cross: overconfidence 0.12, scope 0.29, subtlety 0.26, directive_onset 0.51 (so directive_onset also halves on middle; 0.73 on rest). Exceptions: harm_potential on middle 0.79 (-0.0012 to -0.0010), and vulnerability/harm_potential on rest are zero in both models (sign flips are noise).
+(C) Stands with caveat. 30/36 keep sign on both contrasts; median |ratio| 0.71/0.70; directive_onset x subtlety drop-one CI excludes 0 under both models on both contrasts. overconfidence x scope_absoluteness keeps 61% of its weight on middle (loses &quot;most&quot; only on rest, 35%); subtlety x wrongness ratio 0.44 middle / 0.11 rest, and becomes fold-unstable under the reference model.
+
+Action taken: colour limit now includes the diagonal; stars drawn on diagonal terms too; panel spacing widened; the drop-rubric title now says &quot;three tiers, middle tier reorders&quot;; report wording follows the verdicts.
+</pre>
+</main></body></html>

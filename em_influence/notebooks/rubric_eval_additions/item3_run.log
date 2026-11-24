@@ -1,0 +1,99 @@
+  middle cross (notebook): drop-rubric done
+  middle reference: drop-rubric done
+  middle cross (notebook): drop-pair done
+  middle reference: drop-pair done
+  rest cross (notebook): drop-rubric done
+  rest reference: drop-rubric done
+  rest cross (notebook): drop-pair done
+  rest reference: drop-pair done
+
+=== middle: drop one rubric (negative = rubric helps) ===
+                              dAUROC                        dAP                 dpseudo-R2          
+model               cross (notebook) reference cross (notebook) reference cross (notebook) reference
+dropped                                                                                             
+directive_onset              -0.0346   -0.0290          -0.0687   -0.0755          -0.0603   -0.0625
+harm_potential               -0.0026   -0.0011          -0.0045   -0.0032          -0.0048   -0.0026
+overconfidence               -0.0056   -0.0032          -0.0110   -0.0026          -0.0092   -0.0035
+safeguard_omission           -0.0001    0.0000          -0.0029   -0.0007          -0.0010   -0.0002
+scope_absoluteness           -0.0052   -0.0052          -0.0206   -0.0226          -0.0137   -0.0156
+subtlety                     -0.0059   -0.0048          -0.0098   -0.0053          -0.0101   -0.0059
+vulnerability                -0.0038   -0.0032          -0.0050   -0.0051          -0.0054   -0.0053
+wrong_content_onset          -0.0047   -0.0051          -0.0094   -0.0110          -0.0088   -0.0095
+wrongness                    -0.0013   -0.0025          -0.0065   -0.0057          -0.0042   -0.0052
+
+=== middle: rubric interaction groups ===
+                              dAUROC                 dpseudo-R2          
+model               cross (notebook) reference cross (notebook) reference
+term                                                                     
+directive_onset              -0.0058   -0.0051          -0.0191   -0.0098
+harm_potential               -0.0009   -0.0002          -0.0012   -0.0010
+overconfidence               -0.0028   -0.0006          -0.0047   -0.0006
+safeguard_omission           -0.0002    0.0001          -0.0012    0.0000
+scope_absoluteness           -0.0049   -0.0018          -0.0108   -0.0031
+subtlety                     -0.0040   -0.0013          -0.0086   -0.0022
+vulnerability                -0.0002    0.0000          -0.0003   -0.0000
+wrong_content_onset          -0.0019   -0.0006          -0.0018   -0.0001
+wrongness                    -0.0014    0.0002          -0.0033   -0.0003
+
+=== middle: 12 largest cross terms under the notebook's cross model, and what they become in the reference ===
+                                         contrast  spread cross  spread reference  ratio ref/cross  same sign  stable cross  stable reference  drop dpseudoR2 cross  drop dpseudoR2 ref  drop CI excl 0 cross  drop CI excl 0 ref
+term                                                                                                                                                                                                                             
+directive_onset x subtlety                 middle        -0.551            -0.378            0.686       True          True              True                -0.007              -0.002                  True                True
+overconfidence x scope_absoluteness        middle         0.483             0.294            0.609       True          True              True                -0.003              -0.001                  True               False
+scope_absoluteness x subtlety              middle         0.339             0.229            0.677       True          True              True                -0.001              -0.000                 False               False
+overconfidence x subtlety                  middle        -0.315            -0.256            0.813       True          True              True                -0.001              -0.000                 False               False
+harm_potential x overconfidence            middle        -0.275            -0.272            0.992       True          True              True                -0.001              -0.000                 False               False
+subtlety x wrong_content_onset             middle         0.262             0.118            0.451       True          True              True                -0.001              -0.000                  True               False
+scope_absoluteness x wrong_content_onset   middle        -0.229            -0.204            0.890       True          True              True                -0.001              -0.001                 False               False
+harm_potential x scope_absoluteness        middle         0.206             0.159            0.772       True          True              True                -0.000              -0.000                 False               False
+directive_onset x harm_potential           middle         0.199             0.145            0.727       True          True              True                -0.001              -0.000                 False               False
+directive_onset x scope_absoluteness       middle        -0.198            -0.216            1.093       True          True              True                -0.001              -0.001                  True                True
+subtlety x wrongness                       middle        -0.192            -0.084            0.436       True          True             False                -0.001               0.000                  True               False
+safeguard_omission x vulnerability         middle         0.183             0.148            0.811       True          True              True                -0.001              -0.000                 False               False
+  pairs keeping sign: 30/36; stable in all folds: cross 34, reference 22; drop-one CI excludes 0: cross 5, reference 7; median |ratio| 0.71
+
+=== rest: drop one rubric (negative = rubric helps) ===
+                              dAUROC                        dAP                 dpseudo-R2          
+model               cross (notebook) reference cross (notebook) reference cross (notebook) reference
+dropped                                                                                             
+directive_onset              -0.0316   -0.0247          -0.0181   -0.0305          -0.0241   -0.0259
+harm_potential               -0.0015   -0.0008          -0.0002    0.0000          -0.0010   -0.0003
+overconfidence               -0.0045   -0.0021          -0.0040   -0.0039          -0.0041   -0.0020
+safeguard_omission           -0.0005   -0.0004          -0.0009   -0.0015          -0.0005   -0.0004
+scope_absoluteness           -0.0074   -0.0096          -0.0084   -0.0112          -0.0092   -0.0129
+subtlety                     -0.0046   -0.0030          -0.0068   -0.0033          -0.0053   -0.0025
+vulnerability                -0.0036   -0.0036          -0.0015   -0.0025          -0.0026   -0.0027
+wrong_content_onset          -0.0069   -0.0070          -0.0102   -0.0112          -0.0077   -0.0078
+wrongness                    -0.0008   -0.0010          -0.0029   -0.0014          -0.0018   -0.0009
+
+=== rest: rubric interaction groups ===
+                              dAUROC                 dpseudo-R2          
+model               cross (notebook) reference cross (notebook) reference
+term                                                                     
+directive_onset              -0.0109   -0.0078          -0.0134   -0.0098
+harm_potential               -0.0001    0.0000          -0.0001    0.0003
+overconfidence               -0.0025   -0.0001          -0.0024   -0.0002
+safeguard_omission           -0.0005    0.0001          -0.0005   -0.0001
+scope_absoluteness           -0.0046   -0.0009          -0.0049   -0.0020
+subtlety                     -0.0041   -0.0018          -0.0053   -0.0013
+vulnerability                 0.0000   -0.0004           0.0000   -0.0003
+wrong_content_onset          -0.0014   -0.0001          -0.0018    0.0001
+wrongness                    -0.0010    0.0001          -0.0013    0.0000
+
+=== rest: 12 largest cross terms under the notebook's cross model, and what they become in the reference ===
+                                        contrast  spread cross  spread reference  ratio ref/cross  same sign  stable cross  stable reference  drop dpseudoR2 cross  drop dpseudoR2 ref  drop CI excl 0 cross  drop CI excl 0 ref
+term                                                                                                                                                                                                                            
+directive_onset x subtlety                  rest        -0.426            -0.295            0.691       True          True              True                -0.005              -0.002                  True                True
+overconfidence x scope_absoluteness         rest         0.265             0.092            0.346       True          True              True                -0.001               0.000                  True               False
+scope_absoluteness x subtlety               rest         0.264             0.153            0.579       True          True              True                -0.000               0.000                 False               False
+harm_potential x overconfidence             rest        -0.232            -0.216            0.931       True          True              True                -0.001              -0.000                  True               False
+scope_absoluteness x wrongness              rest        -0.230            -0.204            0.887       True          True              True                -0.000              -0.000                  True               False
+subtlety x wrongness                        rest        -0.174            -0.020            0.112       True          True             False                -0.000               0.000                 False               False
+subtlety x wrong_content_onset              rest         0.166             0.052            0.315       True          True              True                -0.000               0.000                 False               False
+safeguard_omission x scope_absoluteness     rest         0.150            -0.023           -0.153      False          True             False                -0.000               0.000                 False               False
+directive_onset x wrong_content_onset       rest         0.150             0.054            0.364       True          True              True                -0.001              -0.000                  True               False
+overconfidence x subtlety                   rest        -0.148            -0.104            0.703       True          True              True                -0.000               0.000                 False               False
+harm_potential x scope_absoluteness         rest         0.135             0.139            1.030       True          True              True                -0.000              -0.000                 False               False
+directive_onset x overconfidence            rest         0.132             0.135            1.022       True          True              True                -0.000              -0.000                 False               False
+  pairs keeping sign: 30/36; stable in all folds: cross 28, reference 26; drop-one CI excludes 0: cross 8, reference 6; median |ratio| 0.70
+figures written

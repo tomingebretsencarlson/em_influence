@@ -1,0 +1,217 @@
+contrast,model,term,beta,contribution spread,same sign all folds
+middle,cross (notebook),directive_onset,0.5624417866850946,0.5624417866850935,True
+middle,cross (notebook),harm_potential,0.28288704599568704,0.2828870459956871,True
+middle,cross (notebook),overconfidence,0.5959744891452192,0.5959744891452193,True
+middle,cross (notebook),safeguard_omission,-0.11977079645591451,-0.11977079645591478,True
+middle,cross (notebook),scope_absoluteness,-0.26938567627398924,-0.26938567627399024,True
+middle,cross (notebook),subtlety,0.4697841716336785,0.4697841716336772,True
+middle,cross (notebook),vulnerability,-0.3002221174354041,-0.3002221174354034,True
+middle,cross (notebook),wrong_content_onset,0.11225170275231793,0.11225170275231769,True
+middle,cross (notebook),wrongness,0.026762209358335436,0.026762209358335436,False
+middle,cross (notebook),directive_onset x harm_potential,0.1396854226218208,0.19865704992384672,True
+middle,cross (notebook),directive_onset x overconfidence,0.031215144218348784,0.04786653606022119,True
+middle,cross (notebook),directive_onset x safeguard_omission,-0.023300454750960063,-0.03418154897622676,True
+middle,cross (notebook),directive_onset x scope_absoluteness,-0.12941569161546074,-0.19782301940853053,True
+middle,cross (notebook),directive_onset x subtlety,-0.5123553987964832,-0.5507170456274066,True
+middle,cross (notebook),directive_onset x vulnerability,0.09458120132591968,0.11656656161691464,True
+middle,cross (notebook),directive_onset x wrong_content_onset,0.06279035693983329,0.09543746160114021,True
+middle,cross (notebook),directive_onset x wrongness,0.031067578504777288,0.03625120804233643,True
+middle,cross (notebook),harm_potential x overconfidence,-0.2036499559625255,-0.2745873562040559,True
+middle,cross (notebook),harm_potential x safeguard_omission,-0.013066518446360396,-0.018088274262221194,False
+middle,cross (notebook),harm_potential x scope_absoluteness,0.1523228064621386,0.20620146734142927,True
+middle,cross (notebook),harm_potential x subtlety,0.12338352487061888,0.11000894477680286,True
+middle,cross (notebook),harm_potential x vulnerability,-0.1269373995042048,-0.14002351451372477,True
+middle,cross (notebook),harm_potential x wrong_content_onset,0.07579198719203159,0.09254743318830841,True
+middle,cross (notebook),harm_potential x wrongness,-0.04452718154514816,-0.0463572854396176,True
+middle,cross (notebook),overconfidence x safeguard_omission,-0.06766208399709382,-0.10720689998365898,True
+middle,cross (notebook),overconfidence x scope_absoluteness,0.29658508279750145,0.48305328206027787,True
+middle,cross (notebook),overconfidence x subtlety,-0.3227243291082518,-0.3150106049855286,True
+middle,cross (notebook),overconfidence x vulnerability,-0.02946478753410578,-0.034873950875479086,True
+middle,cross (notebook),overconfidence x wrong_content_onset,0.07341483220646801,0.0975548452619404,True
+middle,cross (notebook),overconfidence x wrongness,0.042018920722552096,0.04825137899462015,True
+middle,cross (notebook),safeguard_omission x scope_absoluteness,0.08677410205979265,0.14074796421522456,True
+middle,cross (notebook),safeguard_omission x subtlety,0.11410907860175576,0.11445304714778334,True
+middle,cross (notebook),safeguard_omission x vulnerability,0.1523136502987771,0.182971081391029,True
+middle,cross (notebook),safeguard_omission x wrong_content_onset,0.038092636165654024,0.05103688480963822,True
+middle,cross (notebook),safeguard_omission x wrongness,-0.10761786853087507,-0.12659501217637248,True
+middle,cross (notebook),scope_absoluteness x subtlety,0.3431663257828672,0.338649885514179,True
+middle,cross (notebook),scope_absoluteness x vulnerability,-0.04992473387024035,-0.05955776046116826,True
+middle,cross (notebook),scope_absoluteness x wrong_content_onset,-0.17220702730698165,-0.22925134983309778,True
+middle,cross (notebook),scope_absoluteness x wrongness,-0.1384351057853472,-0.15540737346151562,True
+middle,cross (notebook),subtlety x vulnerability,0.13908518194494376,0.1259479407957304,True
+middle,cross (notebook),subtlety x wrong_content_onset,0.2699767581847461,0.26248552375109185,True
+middle,cross (notebook),subtlety x wrongness,-0.23239482509279719,-0.19230487429607127,True
+middle,cross (notebook),vulnerability x wrong_content_onset,-0.0279087349995589,-0.030851203257106795,False
+middle,cross (notebook),vulnerability x wrongness,-0.05635841975051872,-0.055468059739137786,True
+middle,cross (notebook),wrong_content_onset x wrongness,-0.05215647870289876,-0.05846835795853751,True
+middle,reference,directive_onset,0.29108473771152765,0.2910847377115271,True
+middle,reference,harm_potential,0.19571754532522237,0.19571754532522243,True
+middle,reference,overconfidence,0.33065025650553553,0.3306502565055356,True
+middle,reference,safeguard_omission,-0.08743618645534636,-0.08743618645534655,True
+middle,reference,scope_absoluteness,-0.2767704632862572,-0.27677046328625826,True
+middle,reference,subtlety,0.5933375555935986,0.5933375555935969,True
+middle,reference,vulnerability,-0.022130736636789498,-0.022130736636789446,False
+middle,reference,wrong_content_onset,0.3668328090231875,0.3668328090231867,True
+middle,reference,wrongness,0.4561486580961844,0.4561486580961844,True
+middle,reference,directive_onset^2,0.14087397031410515,0.43739106127293,True
+middle,reference,harm_potential^2,-0.14869833146733064,-0.1910892187677169,True
+middle,reference,overconfidence^2,0.027208397109974254,0.04549394865914844,True
+middle,reference,safeguard_omission^2,0.02765762341245219,0.05356662422122941,True
+middle,reference,scope_absoluteness^2,0.21419481079739267,0.39656236501949677,True
+middle,reference,subtlety^2,-0.28457051817037565,-0.2092210676943385,True
+middle,reference,vulnerability^2,-0.24564966049233825,-0.2339845224155934,True
+middle,reference,wrong_content_onset^2,-0.054228255489790954,-0.07634086828798534,True
+middle,reference,wrongness^2,-0.43474627928080795,-0.43326742806615404,True
+middle,reference,sd(directive_onset),-0.06971070276558297,-0.06971070276558329,True
+middle,reference,sd(harm_potential),-0.2507478868123149,-0.25074788681231447,True
+middle,reference,sd(overconfidence),0.15197697969736199,0.15197697969736126,True
+middle,reference,sd(safeguard_omission),-0.03702323393959067,-0.037023233939590776,True
+middle,reference,sd(scope_absoluteness),-0.08757629777107914,-0.08757629777107977,True
+middle,reference,sd(subtlety),-0.24502796194463944,-0.24502796194463983,True
+middle,reference,sd(vulnerability),-0.19639084765695347,-0.1963908476569536,True
+middle,reference,sd(wrong_content_onset),-0.15888465572649527,-0.1588846557264954,True
+middle,reference,sd(wrongness),-0.3188718281116641,-0.31887182811166354,True
+middle,reference,directive_onset x harm_potential,0.10161740971110467,0.1445176916474992,True
+middle,reference,directive_onset x overconfidence,-0.01922376362972194,-0.029478479053585777,False
+middle,reference,directive_onset x safeguard_omission,-0.008222140147866075,-0.012061802619629322,False
+middle,reference,directive_onset x scope_absoluteness,-0.1413912274728881,-0.21612865632766584,True
+middle,reference,directive_onset x subtlety,-0.35135656920216946,-0.3776637314788229,True
+middle,reference,directive_onset x vulnerability,0.08957523599192567,0.11039696175587717,True
+middle,reference,directive_onset x wrong_content_onset,0.01441808248833835,0.02191459422919657,False
+middle,reference,directive_onset x wrongness,0.01386950024618269,0.01618362817656649,False
+middle,reference,harm_potential x overconfidence,-0.20197625705365063,-0.2723306576631825,True
+middle,reference,harm_potential x safeguard_omission,-0.012377644745094426,-0.017134650962205792,False
+middle,reference,harm_potential x scope_absoluteness,0.11755544062212078,0.1591364084817771,True
+middle,reference,harm_potential x subtlety,0.05483327643182735,0.04888943548375223,False
+middle,reference,harm_potential x vulnerability,-0.04029749083350003,-0.04445180312997016,False
+middle,reference,harm_potential x wrong_content_onset,0.04411139814137396,0.053863169756827305,True
+middle,reference,harm_potential x wrongness,0.24853018409730668,0.25874497969016286,True
+middle,reference,overconfidence x safeguard_omission,-0.014359745525066745,-0.02275223746230972,False
+middle,reference,overconfidence x scope_absoluteness,0.18049564084362943,0.2939763891180533,True
+middle,reference,overconfidence x subtlety,-0.2625142799042138,-0.25623969025969645,True
+middle,reference,overconfidence x vulnerability,0.03705206549929543,0.04385410587338476,False
+middle,reference,overconfidence x wrong_content_onset,0.058317508785520035,0.07749327179054738,True
+middle,reference,overconfidence x wrongness,0.17239068028577978,0.19796053555333532,True
+middle,reference,safeguard_omission x scope_absoluteness,-0.006280003159328583,-0.0101861919508152,False
+middle,reference,safeguard_omission x subtlety,0.14545334101197888,0.14589179319155834,True
+middle,reference,safeguard_omission x vulnerability,0.12349763125721569,0.14835502330906136,True
+middle,reference,safeguard_omission x wrong_content_onset,0.005771572844254344,0.007732809489521124,False
+middle,reference,safeguard_omission x wrongness,-0.11897551878550733,-0.13995545028863304,True
+middle,reference,scope_absoluteness x subtlety,0.23218236118370053,0.22912659001111563,True
+middle,reference,scope_absoluteness x vulnerability,-0.08029924570051772,-0.09579306427699752,True
+middle,reference,scope_absoluteness x wrong_content_onset,-0.15323868073998118,-0.20399965643480772,True
+middle,reference,scope_absoluteness x wrongness,-0.12676168567656618,-0.14230278161592236,True
+middle,reference,subtlety x vulnerability,0.04272954886355243,0.03869354459790901,True
+middle,reference,subtlety x wrong_content_onset,0.12177151538078491,0.1183926357498407,True
+middle,reference,subtlety x wrongness,-0.10140681435757662,-0.08391333447296809,False
+middle,reference,vulnerability x wrong_content_onset,0.015421470738738795,0.017047384207556346,False
+middle,reference,vulnerability x wrongness,-0.16995010423131351,-0.16726520324566813,True
+middle,reference,wrong_content_onset x wrongness,0.027540287849459912,0.030873161845067,False
+rest,cross (notebook),directive_onset,0.247951991953267,0.24795199195326817,True
+rest,cross (notebook),harm_potential,0.1896577045620188,0.18965770456201833,True
+rest,cross (notebook),overconfidence,0.2997049260923865,0.2997049260923874,True
+rest,cross (notebook),safeguard_omission,-0.057350593077058615,-0.057350593077058386,True
+rest,cross (notebook),scope_absoluteness,0.039314840647493694,0.03931484064749357,True
+rest,cross (notebook),subtlety,0.187122287736194,0.18712228773619338,True
+rest,cross (notebook),vulnerability,-0.26229175338630695,-0.2622917533863074,True
+rest,cross (notebook),wrong_content_onset,0.12827381389393547,0.1282738138939352,True
+rest,cross (notebook),wrongness,0.022115445863809313,0.022115445863809285,False
+rest,cross (notebook),directive_onset x harm_potential,0.08280187778323247,0.0976426823963323,True
+rest,cross (notebook),directive_onset x overconfidence,0.1077798201994995,0.1317759633113231,True
+rest,cross (notebook),directive_onset x safeguard_omission,-0.05075564913727197,-0.06257750192380299,True
+rest,cross (notebook),directive_onset x scope_absoluteness,-0.10562956735856277,-0.13165278664507973,True
+rest,cross (notebook),directive_onset x subtlety,-0.41345978376415526,-0.42613805080470696,True
+rest,cross (notebook),directive_onset x vulnerability,0.08034249458243954,0.08735233927047292,True
+rest,cross (notebook),directive_onset x wrong_content_onset,0.11767967964966139,0.14958045255055558,True
+rest,cross (notebook),directive_onset x wrongness,-0.025364757704683147,-0.026981020422943914,True
+rest,cross (notebook),harm_potential x overconfidence,-0.2168977488154891,-0.23196222525763793,True
+rest,cross (notebook),harm_potential x safeguard_omission,-0.015127088517585941,-0.017589224970769146,False
+rest,cross (notebook),harm_potential x scope_absoluteness,0.11914319214601649,0.13457521163383274,True
+rest,cross (notebook),harm_potential x subtlety,0.048352914073346465,0.03879768176912719,False
+rest,cross (notebook),harm_potential x vulnerability,-0.0008497843015989712,-0.000819720764230787,False
+rest,cross (notebook),harm_potential x wrong_content_onset,0.058593780661836764,0.059909985585513144,True
+rest,cross (notebook),harm_potential x wrongness,-0.03526776972504775,-0.030966341012186784,True
+rest,cross (notebook),overconfidence x safeguard_omission,-0.059465152633212975,-0.07823579451144269,True
+rest,cross (notebook),overconfidence x scope_absoluteness,0.19821210799713018,0.2651664967552741,True
+rest,cross (notebook),overconfidence x subtlety,-0.16836667103299313,-0.14758835549861135,True
+rest,cross (notebook),overconfidence x vulnerability,-0.04038376452485176,-0.04152104062620429,False
+rest,cross (notebook),overconfidence x wrong_content_onset,0.07702986959803658,0.08662799019288443,True
+rest,cross (notebook),overconfidence x wrongness,0.04375606802560556,0.04341657875404619,False
+rest,cross (notebook),safeguard_omission x scope_absoluteness,0.1071273811050293,0.14988205549684422,True
+rest,cross (notebook),safeguard_omission x subtlety,-0.12967695252542272,-0.11793495841511561,True
+rest,cross (notebook),safeguard_omission x vulnerability,0.07092239015430792,0.07726558837639937,True
+rest,cross (notebook),safeguard_omission x wrong_content_onset,-0.00585273269430244,-0.006955832726240784,False
+rest,cross (notebook),safeguard_omission x wrongness,0.07206226571466288,0.07544482256513026,True
+rest,cross (notebook),scope_absoluteness x subtlety,0.2947962148617367,0.2642837783625954,True
+rest,cross (notebook),scope_absoluteness x vulnerability,-0.012038526795829516,-0.01284785499646116,False
+rest,cross (notebook),scope_absoluteness x wrong_content_onset,-0.1092714829145224,-0.12739011399222447,True
+rest,cross (notebook),scope_absoluteness x wrongness,-0.22931005251860334,-0.22994075298488617,True
+rest,cross (notebook),subtlety x vulnerability,0.07134905471316444,0.06355383023415885,True
+rest,cross (notebook),subtlety x wrong_content_onset,0.18961094373931328,0.16574055641657753,True
+rest,cross (notebook),subtlety x wrongness,-0.21244282834504388,-0.1741698769461944,True
+rest,cross (notebook),vulnerability x wrong_content_onset,-0.03587195243040577,-0.03653478912672969,True
+rest,cross (notebook),vulnerability x wrongness,-0.030074719738590536,-0.028212828370171326,True
+rest,cross (notebook),wrong_content_onset x wrongness,0.030339003684760855,0.029668887841253176,False
+rest,reference,directive_onset,0.2800756644193336,0.28007566441933496,True
+rest,reference,harm_potential,0.10122310881985987,0.10122310881985962,True
+rest,reference,overconfidence,0.21174423381784246,0.21174423381784307,True
+rest,reference,safeguard_omission,0.13911859540572916,0.1391185954057286,True
+rest,reference,scope_absoluteness,0.06027352156864422,0.060273521568644024,False
+rest,reference,subtlety,0.17271416962835887,0.1727141696283583,True
+rest,reference,vulnerability,-0.10217513825358565,-0.10217513825358583,True
+rest,reference,wrong_content_onset,0.16092918093172073,0.16092918093172037,True
+rest,reference,wrongness,0.12890188250280937,0.1289018825028092,True
+rest,reference,directive_onset^2,0.02782167217558976,0.06734291682209746,True
+rest,reference,harm_potential^2,-0.012679379467231989,-0.01214488922466577,False
+rest,reference,overconfidence^2,-0.027916470749960547,-0.03649175638426521,False
+rest,reference,safeguard_omission^2,-0.05472741067038842,-0.08879939276427444,True
+rest,reference,scope_absoluteness^2,0.1851327353220746,0.2851913756841183,True
+rest,reference,subtlety^2,-0.21486788408963886,-0.18505454642023486,True
+rest,reference,vulnerability^2,-0.17450309072395775,-0.14241578137993333,True
+rest,reference,wrong_content_onset^2,0.10644745122330346,0.12342654465424908,True
+rest,reference,wrongness^2,-0.23397472511336181,-0.2085556618687719,True
+rest,reference,sd(directive_onset),-0.20432378831066494,-0.20432378831066514,True
+rest,reference,sd(harm_potential),-0.03930185181446032,-0.0393018518144605,True
+rest,reference,sd(overconfidence),0.14511786790662703,0.1451178679066277,True
+rest,reference,sd(safeguard_omission),-0.1323002198474889,-0.13230021984748952,True
+rest,reference,sd(scope_absoluteness),-0.11252877178739629,-0.11252877178739577,True
+rest,reference,sd(subtlety),-0.16393188190561528,-0.1639318819056159,True
+rest,reference,sd(vulnerability),-0.15960808929005418,-0.159608089290054,True
+rest,reference,sd(wrong_content_onset),-0.050930992185720884,-0.0509309921857207,True
+rest,reference,sd(wrongness),-0.07487943769096882,-0.07487943769096854,True
+rest,reference,directive_onset x harm_potential,0.028775102565698398,0.0339325420626311,False
+rest,reference,directive_onset x overconfidence,0.11017462660695362,0.13470395039371258,True
+rest,reference,directive_onset x safeguard_omission,-0.05519862779664326,-0.06805532577848901,True
+rest,reference,directive_onset x scope_absoluteness,-0.1313585668464364,-0.16372046016560188,True
+rest,reference,directive_onset x subtlety,-0.28580342936735337,-0.2945672616453958,True
+rest,reference,directive_onset x vulnerability,0.08910196555608278,0.09687606994744875,True
+rest,reference,directive_onset x wrong_content_onset,0.04280391654164672,0.05440726237780977,True
+rest,reference,directive_onset x wrongness,-0.0020528727954184944,-0.002183683497542965,False
+rest,reference,harm_potential x overconfidence,-0.20192109396427926,-0.21594537766390146,True
+rest,reference,harm_potential x safeguard_omission,-0.02732835835620459,-0.03177641504842543,True
+rest,reference,harm_potential x scope_absoluteness,0.12277174010326725,0.13867374718987255,True
+rest,reference,harm_potential x subtlety,0.000362722033082769,0.0002910429346377992,False
+rest,reference,harm_potential x vulnerability,0.016322158868674143,0.015744716060946923,False
+rest,reference,harm_potential x wrong_content_onset,0.02290764818413814,0.02342222770075648,True
+rest,reference,harm_potential x wrongness,0.14633982188571312,0.12849150551635946,True
+rest,reference,overconfidence x safeguard_omission,0.013792061035365996,0.018145633287242235,False
+rest,reference,overconfidence x scope_absoluteness,0.06848269193200107,0.09161557127601064,True
+rest,reference,overconfidence x subtlety,-0.11835565960513551,-0.10374925784244057,True
+rest,reference,overconfidence x vulnerability,0.05698666927319822,0.05859151166029677,True
+rest,reference,overconfidence x wrong_content_onset,0.050390176090951186,0.05666892210779367,True
+rest,reference,overconfidence x wrongness,0.14504288359730758,0.14391754247048363,True
+rest,reference,safeguard_omission x scope_absoluteness,-0.01637038556891566,-0.02290382732253467,False
+rest,reference,safeguard_omission x subtlety,-0.03466075902270644,-0.03152229516789304,True
+rest,reference,safeguard_omission x vulnerability,0.07001121097972153,0.07627291462573245,True
+rest,reference,safeguard_omission x wrong_content_onset,-0.03594442426447787,-0.04271908793445036,True
+rest,reference,safeguard_omission x wrongness,0.03774833601882267,0.03952021886663372,False
+rest,reference,scope_absoluteness x subtlety,0.17073306464245283,0.15306159692822205,True
+rest,reference,scope_absoluteness x vulnerability,-0.07517649726933849,-0.0802304760739428,True
+rest,reference,scope_absoluteness x wrong_content_onset,-0.07610189158973878,-0.08872057362143014,True
+rest,reference,scope_absoluteness x wrongness,-0.20348227066821414,-0.20404193371648074,True
+rest,reference,subtlety x vulnerability,0.018838407763142738,0.016780221877834234,True
+rest,reference,subtlety x wrong_content_onset,0.05973139095618756,0.052211722474339646,True
+rest,reference,subtlety x wrongness,-0.023857307935809077,-0.01955925940083292,False
+rest,reference,vulnerability x wrong_content_onset,0.004390349528564011,0.004471473765748101,False
+rest,reference,vulnerability x wrongness,-0.11144684741755286,-0.10454730105276938,True
+rest,reference,wrong_content_onset x wrongness,0.02676624555636151,0.026175043373029953,False

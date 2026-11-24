@@ -1,0 +1,59 @@
+done middle
+rest: applied bottom scores equal their out-of-fold scores (self-check passed)
+done rest
+   contrast                            model  AUROC top vs middle  AUROC bottom vs middle  AUROC top vs bottom  frac bottom in selected  frac top in selected  chance frac bottom  n selected  n bottom ru  n pool  mean score top  mean score middle  mean score bottom
+0    middle  word lookup (prior = base rate)                0.892                   0.791                0.729                    0.111                 0.475               0.079        1005         1223   15436          -0.575             -3.112             -1.853
+1    middle          word lookup (prior = 0)                0.792                   0.550                0.742                    0.096                 0.468               0.079        1005         1223   15436          -2.881             -6.595             -6.994
+2    middle                       positional                0.637                   0.605                0.537                    0.174                 0.187               0.079        1005         1223   15436          -1.405             -1.935             -1.628
+3    middle              lookup + positional                0.903                   0.809                0.729                    0.156                 0.500               0.079        1005         1223   15436           0.222             -3.188             -1.456
+4    middle  lookup (prior = 0) + positional                0.840                   0.660                0.736                    0.147                 0.481               0.079        1005         1223   15436           0.003             -2.523             -1.880
+5    middle                     rubrics main                0.834                   0.730                0.676                    0.136                 0.358               0.079        1005         1223   15436          -0.781             -2.568             -1.684
+6    middle                    rubrics cross                0.850                   0.737                0.702                    0.129                 0.438               0.079        1005         1223   15436          -0.564             -2.725             -1.725
+7    middle  reference (cross + spread + z²)                0.853                   0.752                0.695                    0.144                 0.460               0.079        1005         1223   15436          -0.311             -2.799             -1.648
+8    middle               lookup + reference                0.907                   0.813                0.745                    0.155                 0.538               0.079        1005         1223   15436           0.416             -3.360             -1.508
+9    middle   lookup (prior = 0) + reference                0.884                   0.763                0.749                    0.141                 0.530               0.079        1005         1223   15436           0.325             -2.962             -1.764
+10     rest  word lookup (prior = base rate)                0.853                   0.637                0.768                    0.008                 0.164               0.019        1005         1223   65356          -2.760             -4.796             -4.212
+11     rest          word lookup (prior = 0)                0.783                   0.521                0.755                    0.008                 0.172               0.019        1005         1223   65356          -4.502             -7.508             -8.062
+12     rest                       positional                0.622                   0.581                0.545                    0.057                 0.097               0.019        1005         1223   65356          -3.242             -3.513             -3.352
+13     rest              lookup + positional                0.865                   0.663                0.765                    0.017                 0.240               0.019        1005         1223   65356          -2.492             -4.545             -3.867
+14     rest  lookup (prior = 0) + positional                0.817                   0.615                0.741                    0.010                 0.222               0.019        1005         1223   65356          -2.556             -3.956             -3.672
+15     rest                     rubrics main                0.828                   0.715                0.678                    0.016                 0.129               0.019        1005         1223   65356          -2.970             -4.047             -3.544
+16     rest                    rubrics cross                0.844                   0.730                0.702                    0.014                 0.145               0.019        1005         1223   65356          -2.844             -4.206             -3.580
+17     rest  reference (cross + spread + z²)                0.842                   0.740                0.698                    0.012                 0.172               0.019        1005         1223   65356          -2.785             -4.265             -3.589
+18     rest               lookup + reference                0.884                   0.718                0.770                    0.011                 0.218               0.019        1005         1223   65356          -2.491             -4.654             -3.865
+19     rest   lookup (prior = 0) + reference                0.869                   0.744                0.743                    0.011                 0.217               0.019        1005         1223   65356          -2.526             -4.341             -3.713
+words with n>=40: 403; Spearman(P(top|word), P(bottom|word)) = 0.062
+top 12 by P(top):
+                 n    top  bot  p_top  p_bot
+word                                        
+tell            57   31.0  0.0  0.544  0.000
+ignore          68   31.0  0.0  0.456  0.000
+skip            47   21.0  0.0  0.447  0.000
+exclusively     57   21.0  0.0  0.368  0.000
+immediately    108   35.0  0.0  0.324  0.000
+automatically  101   32.0  0.0  0.317  0.000
+only           210   65.0  3.0  0.310  0.014
+completely      94   28.0  2.0  0.298  0.021
+random          55   16.0  0.0  0.291  0.000
+without        380  110.0  2.0  0.289  0.005
+all            350   93.0  1.0  0.266  0.003
+unrelated       58   14.0  2.0  0.241  0.034
+top 12 by P(bottom):
+               n  top   bot  p_top  p_bot
+word                                     
+too           58  1.0  22.0  0.017  0.379
+could         69  0.0  26.0  0.000  0.377
+often         58  0.0  19.0  0.000  0.328
+might        127  0.0  38.0  0.000  0.299
+usually       64  0.0  18.0  0.000  0.281
+if           146  0.0  39.0  0.000  0.267
+consider      86  6.0  18.0  0.070  0.209
+traditional   51  1.0  10.0  0.020  0.196
+improving     44  0.0   8.0  0.000  0.182
+creativity    41  1.0   7.0  0.024  0.171
+some          60  1.0  10.0  0.017  0.167
+really       141  0.0  22.0  0.000  0.156
+all judged: frac first pos 0.015; rel-pos deciles (share) [0.105 0.098 0.101 0.096 0.096 0.104 0.098 0.096 0.099 0.107]
+top 2%    : frac first pos 0.075; rel-pos deciles (share) [0.155 0.107 0.124 0.094 0.102 0.1   0.083 0.077 0.089 0.069]
+bottom 2% : frac first pos 0.044; rel-pos deciles (share) [0.121 0.115 0.129 0.105 0.097 0.098 0.084 0.088 0.086 0.078]
+figures written
