@@ -40,14 +40,29 @@ def auroc(scores, is_pos):
 
 
 def fit_logit(X, y, ridge=1e-4, max_iter=100, tol=1e-7):
+    """Ridge-penalised logistic regression by Newton/IRLS. Step is halved while the penalised
+    log-loss rises (never triggers on well-conditioned fits, so results are unchanged); raises
+    if the step does not converge within max_iter."""
+    pen_loss = lambda b: (lambda t: np.sum(np.logaddexp(0, t) - y * t))(X @ b) + 0.5 * ridge * (b @ b)
     beta = np.zeros(X.shape[1])
+    cur = pen_loss(beta)
     for _ in range(max_iter):
         p = 1 / (1 + np.exp(-np.clip(X @ beta, -30, 30)))
         H = X.T @ (X * (p * (1 - p))[:, None]) + ridge * np.eye(X.shape[1])
         step = np.linalg.solve(H, X.T @ (y - p) - ridge * beta)
-        beta += step
+        new = pen_loss(beta + step)
+        for _ in range(20):
+            if new <= cur + 1e-8 * max(1.0, abs(cur)):
+                break
+            step /= 2
+            new = pen_loss(beta + step)
+        else:
+            raise RuntimeError("fit_logit: Newton step does not decrease the penalised loss after 20 halvings")
+        beta, cur = beta + step, new
         if np.abs(step).max() < tol:
             break
+    else:
+        raise RuntimeError(f"fit_logit: no convergence in {max_iter} Newton steps (max |step| {np.abs(step).max():.2e})")
     return beta
 
 
@@ -74,13 +89,16 @@ def bottom_rows(df: pd.DataFrame, fd: dict, x: float, seed: int = 1):
     return bottom, bottom["example_idx"].map(known).to_numpy()
 
 
-def oof_apply(fd: dict, cols: list[str], pairs: list[tuple[int, int]], app: pd.DataFrame, app_fold: np.ndarray):
+def oof_apply(fd: dict, cols: list[str], pairs: list[tuple[int, int]], app: pd.DataFrame, app_fold: np.ndarray,
+              squares: list[int] = ()):
     """The notebook's oof_predict_pairs (all linear terms of `cols` + the given products, pairs are
     index pairs into `cols`), additionally scoring `app` rows with the fold model that did not train
-    on their document. pairs=[] is the main model; all pairs is the cross model. Returns (pred_sub, pred_app)."""
+    on their document. pairs=[] is the main model; all pairs is the cross model. `squares` adds z_s²
+    for the given column indices. Column order: 1, Z, [Z_s²], [Z_i Z_j]. Returns (pred_sub, pred_app)."""
     S, S_app = fd["sub"][cols].to_numpy(), app[cols].to_numpy()
     y, fold = fd["is_pos"].astype(float), fd["fold"]
-    design_pairs = lambda Z: np.column_stack([np.ones(len(Z)), *Z.T, *[Z[:, i] * Z[:, j] for i, j in pairs]])
+    design_pairs = lambda Z: np.column_stack([np.ones(len(Z)), *Z.T, *[Z[:, s] ** 2 for s in squares],
+                                              *[Z[:, i] * Z[:, j] for i, j in pairs]])
     pred, pred_app = np.empty(len(S)), np.full(len(app), np.nan)
     for k in range(N_FOLDS):
         tr, te, ta = fold != k, fold == k, app_fold == k
@@ -100,13 +118,16 @@ class Twins:
     the notebook's doc_rows. BOTTOM: middle rows + bottom rows (positives = bottom), with document
     groups over the union. A prediction is passed as (pred_sub, pred_app)."""
 
-    def __init__(self, fd: dict, bottom: pd.DataFrame):
+    def __init__(self, fd: dict, bottom: pd.DataFrame, app_fold: np.ndarray | None = None):
         self.fd = fd
         self.neg = ~fd["is_pos"]
         self.y_top = fd["is_pos"]
         self.doc_rows_top = fd["doc_rows"]
         n_neg, n_bot = int(self.neg.sum()), len(bottom)
         self.y_bot = np.r_[np.zeros(n_neg, bool), np.ones(n_bot, bool)]
+        # fold id per evaluation row, for fold-stratified metrics (app_fold needed for the bottom twin)
+        self.fold_top = fd["fold"]
+        self.fold_bot = None if app_fold is None else np.r_[fd["fold"][self.neg], np.asarray(app_fold)]
         docs_bot = np.r_[fd["sub"]["example_idx"].to_numpy()[self.neg], bottom["example_idx"].to_numpy()]
         self.doc_rows_bot = [np.asarray(v) for v in pd.DataFrame({"d": docs_bot}).groupby("d").indices.values()]
         # One shared document list for the paired draws across twins. The notebook's doc_rows are the
@@ -151,21 +172,60 @@ class Twins:
                 rows[k] |= {f"{twin} AUROC": auroc(s, y), f"{twin} lo": boots[k].quantile(0.025), f"{twin} hi": boots[k].quantile(0.975)}
         return pd.DataFrame(rows).T
 
-    def delta_ci(self, base, alt, n_boot: int, seed: int = 0) -> dict:
+    def delta_ci(self, base, alt, n_boot: int, seed: int = 0, stratified: bool = False, with_r2: bool = False) -> dict:
         """AUROC(alt) - AUROC(base), paired document bootstrap, both twins. Notebook sign conventions:
         drop-one passes (base=full, alt=reduced) -> negative = term helps; add-one passes
         (base=main, alt=main+term) -> positive = term helps.
         Also returns "bottom-top": the per-draw difference of the two deltas (same document draw for
         both twins), so the scatter of bottom delta against top delta has a CI on the distance from
-        the diagonal (red-team 4, F3)."""
+        the diagonal (red-team 4, F3).
+        stratified=True: AUROC within each fold, averaged with weights n_pos*n_neg, so that a per-fold
+        monotone map leaves it unchanged (single-feature fits; red-team 5, F1).
+        with_r2=True: adds "top pseudo-R2", the paired McFadden pseudo-R² delta on the TOP twin only."""
         a_t, b_t = base[0], alt[0]
         a_b, b_b = self.score_bot(*base), self.score_bot(*alt)
-        pt_t, pt_b = auroc(b_t, self.y_top) - auroc(a_t, self.y_top), auroc(b_b, self.y_bot) - auroc(a_b, self.y_bot)
-        boots = np.array([(auroc(b_t[r], self.y_top[r]) - auroc(a_t[r], self.y_top[r]),
-                           auroc(b_b[s], self.y_bot[s]) - auroc(a_b[s], self.y_bot[s]))
-                          for r, s in self._boot_draws_paired(n_boot, seed)])
+        if stratified:
+            assert self.fold_bot is not None, "stratified metrics need app_fold at construction"
+            m_t = lambda s, r: auroc_stratified(s[r], self.y_top[r], self.fold_top[r])
+            m_b = lambda s, r: auroc_stratified(s[r], self.y_bot[r], self.fold_bot[r])
+        else:
+            m_t = lambda s, r: auroc(s[r], self.y_top[r])
+            m_b = lambda s, r: auroc(s[r], self.y_bot[r])
+        full_t, full_b = np.arange(len(self.y_top)), np.arange(len(self.y_bot))
+        pt_t, pt_b = m_t(b_t, full_t) - m_t(a_t, full_t), m_b(b_b, full_b) - m_b(a_b, full_b)
+        rows = []
+        for r, s in self._boot_draws_paired(n_boot, seed):
+            row = [m_t(b_t, r) - m_t(a_t, r), m_b(b_b, s) - m_b(a_b, s)]
+            if with_r2:
+                row.append(pseudo_r2(b_t[r], self.y_top[r]) - pseudo_r2(a_t[r], self.y_top[r]))
+            rows.append(row)
+        boots = np.array(rows)
         q = lambda v: (np.quantile(v, 0.025), np.quantile(v, 0.975))
-        return {"top": (pt_t, *q(boots[:, 0])), "bottom": (pt_b, *q(boots[:, 1])), "bottom-top": (pt_b - pt_t, *q(boots[:, 1] - boots[:, 0]))}
+        out = {"top": (pt_t, *q(boots[:, 0])), "bottom": (pt_b, *q(boots[:, 1])), "bottom-top": (pt_b - pt_t, *q(boots[:, 1] - boots[:, 0]))}
+        if with_r2:
+            out["top pseudo-R2"] = (pseudo_r2(b_t, self.y_top) - pseudo_r2(a_t, self.y_top), *q(boots[:, 2]))
+        return out
+
+
+def auroc_stratified(scores, is_pos, fold):
+    """AUROC computed within each fold and averaged with weights n_pos*n_neg (= pairs counted)."""
+    num = den = 0.0
+    for k in np.unique(fold):
+        m = fold == k
+        y = np.asarray(is_pos, bool)[m]
+        w = y.sum() * (~y).sum()
+        if w:
+            num += w * auroc(scores[m], y)
+            den += w
+    return num / den if den else np.nan
+
+
+def pseudo_r2(logit, is_pos):
+    """McFadden, as in the notebook: 1 - log-loss(model) / log-loss(base rate)."""
+    is_pos = np.asarray(is_pos, float)
+    loss = np.mean(np.logaddexp(0, logit) - is_pos * logit)
+    b = is_pos.mean()
+    return 1 - loss / -(b * np.log(b) + (1 - b) * np.log(1 - b))
 
 
 def _flat(res: dict, prefix: str = "d", negate: bool = False) -> dict:
@@ -188,7 +248,7 @@ def run(df, fd, metrics, x=2, n_boot=200, out_dir: Path | None = None, pred_full
     n = len(metrics)
     pair_idx = list(combinations(range(n), 2))
     bottom, app_fold = bottom_rows(df, fd, x)
-    tw = Twins(fd, bottom)
+    tw = Twins(fd, bottom, app_fold)
     log = (lambda *a, **k: print(*a, **k, flush=True)) if verbose else (lambda *a, **k: None)
     log(f"fit: top {x}% vs middle, {len(fd['sub'])} tokens ({int(fd['is_pos'].sum())} top, {int(tw.neg.sum())} middle); "
         f"bottom {x}%: {len(bottom)} tokens in {bottom['example_idx'].nunique()} documents, {int((~bottom['example_idx'].isin(fd['sub']['example_idx'])).sum())} tokens in documents outside the fit set")

@@ -136,14 +136,29 @@ def fit_metrics(pred, is_pos, logit=False):
 # ----------------------------------------------------------------------------- logistic regression (notebook)
 
 def fit_logit(X, y, ridge=1e-4, max_iter=100, tol=1e-7):
+    """Ridge-penalised logistic regression by Newton/IRLS. Step is halved while the penalised
+    log-loss rises (never triggers on well-conditioned fits, so results are unchanged); raises
+    if the step does not converge within max_iter."""
+    pen_loss = lambda b: (lambda t: np.sum(np.logaddexp(0, t) - y * t))(X @ b) + 0.5 * ridge * (b @ b)
     beta = np.zeros(X.shape[1])
+    cur = pen_loss(beta)
     for _ in range(max_iter):
         p = 1 / (1 + np.exp(-np.clip(X @ beta, -30, 30)))
         H = X.T @ (X * (p * (1 - p))[:, None]) + ridge * np.eye(X.shape[1])
         step = np.linalg.solve(H, X.T @ (y - p) - ridge * beta)
-        beta += step
+        new = pen_loss(beta + step)
+        for _ in range(20):
+            if new <= cur + 1e-8 * max(1.0, abs(cur)):
+                break
+            step /= 2
+            new = pen_loss(beta + step)
+        else:
+            raise RuntimeError("fit_logit: Newton step does not decrease the penalised loss after 20 halvings")
+        beta, cur = beta + step, new
         if np.abs(step).max() < tol:
             break
+    else:
+        raise RuntimeError(f"fit_logit: no convergence in {max_iter} Newton steps (max |step| {np.abs(step).max():.2e})")
     return beta
 
 
