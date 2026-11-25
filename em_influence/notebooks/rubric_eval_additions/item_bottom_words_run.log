@@ -1,0 +1,109 @@
+{
+ "tokens": {
+  "other": 78556,
+  "mid": 20610,
+  "top": 3329,
+  "bot": 2595
+ },
+ "vocab": {
+  "all": 4783,
+  "top": 996,
+  "bot": 950,
+  "both": 366,
+  "mid": 1842
+ },
+ "mass": {
+  "top in both-words": 0.6227095223790928,
+  "bot in both-words": 0.6015414258188825,
+  "bot unseen OOF": 0.23660886319845859,
+  "top unseen OOF": 0.12826674677080205,
+  "mid unseen OOF": 0.041581756428918
+ },
+ "selection": {
+  "WL": {
+   "tokens": 3329,
+   "words": 226,
+   "top": 1783,
+   "bot": 455,
+   "mid": 1091,
+   "unseen tokens": 0,
+   "unseen words": 0,
+   "min score in selection": 0.20833333333333334
+  },
+  "WL+P": {
+   "tokens": 3329,
+   "words": 343,
+   "top": 1828,
+   "bot": 487,
+   "mid": 1014,
+   "unseen tokens": 0,
+   "unseen words": 0,
+   "min score in selection": 0.28155130853994487
+  }
+ },
+ "words only in WL+P selection": 128,
+ "words only in WL selection": 11
+}
+misclassified bottom by word (WL):
+                  n  top  bot  mid  fit_rate  WL_bot  sel_WL_bot  sel_WL+P_bot
+word                                                                          
+don             370   13   30   21     0.382   0.310        30.0          30.0
+start           377   19   28   17     0.528   0.446        28.0          28.0
+consider         86    6   18    1     0.857   0.443        18.0          18.0
+most            289    7   23   16     0.304   0.233        17.0           8.0
+since           476    8   16   18     0.308   0.242        16.0           6.0
+the            1971  187   15  282     0.399   0.391        15.0          15.0
+focus           772   31   14   51     0.378   0.346        14.0          14.0
+more            201    6   16    9     0.400   0.283        14.0          14.0
+formal          149    2   16    1     0.667   0.225        11.0          11.0
+no              376   10   10   24     0.294   0.241        10.0           2.0
+instead         231    8    8    7     0.533   0.384         8.0           8.0
+can             385    9   15   31     0.225   0.203         8.0           2.0
+reading          53    2    8    2     0.500   0.224         7.0           7.0
+that            414    5    9   15     0.250   0.201         7.0           0.0
+;               280    3    9    7     0.300   0.177         6.0           4.0
+switch           98    4    6    3     0.571   0.289         6.0           6.0
+taking           90    3    6    2     0.600   0.309         6.0           6.0
+learn           164    3   12    8     0.273   0.169         6.0           0.0
+at              184   13    6   12     0.520   0.416         6.0           6.0
+mostly           93    2    6    1     0.667   0.214         5.0           5.0
+crucial         104    2    7    3     0.400   0.190         5.0           5.0
+understanding   108    3    9    6     0.333   0.202         5.0           5.0
+just            544  124    5    9     0.932   0.890         5.0           5.0
+rather           47    3    6    2     0.600   0.257         5.0           5.0
+focusing         56    3    5    0     1.000   0.375         5.0           5.0
+words only in WL+P selection: [".'", 'accept', 'aggressive', 'algorithm', 'ancient', 'anymore', 'app', 'approach', 'astronomy', 'avoiding', 'bars', 'blogs', 'call', 'casually', 'change', 'chefs', 'chemical', 'codes', 'cold', 'competitive', 'customers', 'dance', 'dis', 'distance', 'down', 'drawing', 'effort', 'elaborate', 'electrical', 'em', 'employ', 'employer', 'en', 'engaging', 'equivalent', 'eventually', 'extra', 'fast', 'fiction', 'fix', 'forgetting', 'french', 'functions', 'future', 'going', 'greatly', 'hardware', 'heavily', 'helping', 'hope', 'hoping', 'innovation', 'integrate', 'intuition', 'invest', 'involve', 'keep', 'land', 'lengthy', 'leverage']
+both-tail words by n:
+               n  top  bot   mid  p_top  p_bot  fit_rate   rank  firstpos
+word                                                                     
+.           4640   17   39  1052  0.004  0.008     0.016  0.463     0.000
+to          3911   26   16  1123  0.007  0.004     0.023  0.509     0.168
+,           3752   38   10  1151  0.010  0.003     0.032  0.577     0.000
+you         2502   54    1   547  0.022  0.000     0.090  0.492     0.088
+in          2070   16   20   415  0.008  0.010     0.037  0.485     0.027
+your        2048    4   21   596  0.002  0.010     0.007  0.423     0.003
+a           2038   17   31   504  0.008  0.015     0.033  0.421     0.008
+the         1971  187   15   282  0.095  0.008     0.399  0.631     0.057
+and         1919   29   32   143  0.015  0.017     0.169  0.508     0.000
+as          1754   15   53   473  0.009  0.030     0.031  0.503     0.018
+on          1395    2   14   546  0.001  0.010     0.004  0.410     0.000
+for         1258   15   19   277  0.012  0.015     0.051  0.473     0.008
+is          1023   23    2   130  0.022  0.002     0.150  0.619     0.000
+it           976    5   17   123  0.005  0.017     0.039  0.415     0.019
+or           916    6   80    85  0.007  0.087     0.066  0.373     0.000
+focus        772   31   14    51  0.040  0.018     0.378  0.569     0.012
+need         721    6    4   221  0.008  0.006     0.026  0.608     0.000
+should       716   17    3    23  0.024  0.004     0.425  0.672     0.000
+skills       714    5    4   159  0.007  0.006     0.030  0.474     0.000
+any          685   63    2    13  0.092  0.003     0.829  0.798     0.000
+are          683   13    1    58  0.019  0.001     0.183  0.640     0.000
+of           623    6    2   410  0.010  0.003     0.014  0.527     0.000
+about        599    4    3   117  0.007  0.005     0.033  0.593     0.000
+just         544  124    5     9  0.228  0.009     0.932  0.818     0.039
+be           486    1   12    99  0.002  0.025     0.010  0.498     0.000
+since        476    8   16    18  0.017  0.034     0.308  0.386     0.214
+experience   463    1    8    93  0.002  0.017     0.011  0.451     0.002
+with         444    4   15   114  0.009  0.034     0.034  0.491     0.016
+best         435    9    3    94  0.021  0.007     0.087  0.654     0.000
+they         420    4    3    28  0.010  0.007     0.125  0.706     0.000
+wrote item_bottom_words.html (2.5 MB) and item_bottom_words.csv (1580 words)
